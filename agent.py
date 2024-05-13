@@ -1,4 +1,9 @@
 import warehouse
 
-class State:
+class Agent:
+    def __init__(self):
+        self.state = warehouse.State()
+
+
+
     
