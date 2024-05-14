@@ -1,5 +1,5 @@
 class Warehouse:
-    def __init__(self, agent_x, agent_y, goal_location, box_initial_locations):
+    def __init__(self, agent_x, agent_y, goal_location, box_initial_locations, warehouse_size):
         """Initializes the warehouse environment.
 
         Args:
@@ -7,8 +7,9 @@ class Warehouse:
             agent_y (int): Y coordinate of the agent
             goal_location ( Tuple[int, int] ): Coordinates of the goal location (x, y)
             box_initial_locations (List[Tuple[int, int]]): List of coordinates of the boxes [(x1, y1), (x2, y2), ...] (max 5 boxes)
+            warehouse_size (int): Size of the warehouse (square)
         """
-        self.state = [[0 for _ in range(10)] for _ in range(10)]
+        self.state = [[0 for _ in range(warehouse_size)] for _ in range(warehouse_size)]
         
         self.agent_x, self.agent_y = agent_x, agent_y 
         self.box_initial_locations = box_initial_locations 
@@ -18,14 +19,16 @@ class Warehouse:
         for i in range(5):
             self.state[self.box_initial_locations[i][0]][self.box_initial_locations[i][1]] = i + 1
     
+    
     def PrintWarehouse(self):
         """Prints the warehouse state in a grid format.
         """
         print('Warehouse:')
-        for i in range(10):
-            for j in range(10):
+        for i in range(len(self.state)):
+            for j in range(len(self.state[0])):
                 print(f'{self.state[i][j]:4}', end = ' ')
             print()
+        
         
     def GetAgentLoc(self):
         """Returns the location of the agent in the warehouse.
@@ -34,6 +37,7 @@ class Warehouse:
             Tuple: Coordinates of the agent
         """
         return self.agent_x, self.agent_y
+    
     
     def GetCellContents(self, x, y):
         """Check the value of the cell in the warehouse. 
@@ -49,6 +53,7 @@ class Warehouse:
         """
         return self.state[x][y] 
     
+    
     def GetBoxState(self, box_id):
         """Returns the state of the box.
 
@@ -58,7 +63,29 @@ class Warehouse:
         Returns:
             int: State of the box
         """
-        return self.box_states[box_id]
+        return self.box_states[box_id - 1]
+    
+    
+    def GetInitialBoxLoc(self, box_id):
+        """Returns the initial location of the box.
+
+        Args:
+            box_id (int): ID of the box
+
+        Returns:
+            Tuple: Initial coordinates of the box
+        """
+        return self.box_initial_locations[box_id - 1]
+    
+    
+    def GetWarehouseSize(self):
+        """Returns the size of the warehouse.
+
+        Returns:
+            int: Size of the warehouse
+        """
+        return len(self.state)
+    
     
     def SetBoxState(self, box_id, state):
         """Sets the state of the box.
@@ -67,7 +94,8 @@ class Warehouse:
             box_id (int): ID of the box
             state (int): State of the box
         """
-        self.box_states[box_id] = state
+        self.box_states[box_id - 1] = state
+    
     
     def StackBox(self, box_id):
         """Stacks a given box in the goal location
@@ -90,6 +118,18 @@ class Warehouse:
                 self.state[self.goal_location[0]][self.goal_location[1]] = box_id
                 return False
     
+    
+    def MoveAgent(self, cordinates):
+        """Moves the agent to the given cordinates.
+
+        Args:
+            cordinates (Tuple[int, int]): Coordinates to move the agent to.
+
+        Returns:
+            Tuple[int, int]: New coordinates of the agent
+        """
+        self.agent_x, self.agent_y = cordinates
+        return self.agent_x, self.agent_y
     
     
     
