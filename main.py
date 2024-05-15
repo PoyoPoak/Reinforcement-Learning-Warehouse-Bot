@@ -34,7 +34,7 @@ class State:
                                     if (x,y) not in self.box_initial_locations:
                                         self.states.append((x, y, b1, b2, b3, b4, b5, 0))
                                     else:
-                                        self.states.append(x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x,y)) + 1)
+                                        self.states.append((x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x,y)) + 1))
                                     
     
     # Check if the boxes are stacked in the correct order
@@ -43,6 +43,13 @@ class State:
             if state[i+2] == 0:
                 return False
         return True
+    
+    
+    def PrintState(self, state):    
+        print("Agent Location: ", state[0], state[1])
+        print("Boxes: ", state[2:7])
+        print("BoxID in current location: ", state[7])
+        print()
     
     
     # TODO: make this function cache results
@@ -70,14 +77,19 @@ class State:
             xmov,ymov = getMov(direction)
             if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
                 # if (x + xmov, y + ymov, *state[2:]) doesn't work as expected, fix this & other occurences
-                state_list.append(((x + xmov, y + ymov, *state[2:]),0.05))            
+                state_list.append(((x + xmov, y + ymov, *state[2:]),0.05)) 
+            else:
+                state_list.append((state,0.05))
 
             # right
             direction = (originalDirection + 1) % 4 
 
             xmov,ymov = getMov(direction)
             if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
-                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.05))   
+                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.05))
+            else:
+                state_list.append((state,0.05))
+
 
             # double & regular move
             xmov, ymov = getMov(originalDirection)
@@ -189,3 +201,10 @@ class State:
     # def QValueCalculation(self, state, action):
     #     qAction = 0
     #     succesorStates = self.Transition(state, action)
+
+
+warehouse = State()
+
+warehouse.Transition((0, 0, 0, 0, 0, 3, 2, 0), ('move', 'down'))
+
+print()
