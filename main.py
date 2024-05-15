@@ -1,178 +1,191 @@
 import random
+import time
+import numpy as np
 # [x, y, b1, b2, b3, b4, b5, BoxID in location]
 # x and y represent the coordinates of the agent in the 10x10 warehouse
 # b1-b5 represents the boxes, they can each take on values 0: in starting space, 1: Sitting in the goal space, 2: Stacked in the goal, 3: currently being carried
 # boxID in current position 0: No box, boxes 1-5
 # Boxes can only stack in decreasing order
 
-# For each value in the grid, it can denote the following:
-# 0 is empty space  
-# 1 is the agent
-# 10 is box 1 sitting in the start space
-# 11 is box 1 sitting in the goal space
-# 12 is box 1 stacked in the goal space
-# 13 is box 1 currently being carried by the agent
-# 20 is box 2 sitting in the start space
-# and so on...
-
-
-possible_dirs = ['up', 'right', 'down', 'left']
-
+POSSIBLE_DIRS = ['up', 'right', 'down', 'left']
+WAREHOUSE_SIZE = 10
 
 class State:
-    # Initialize the state and the following
     def __init__(self):
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
-        self.goal_location = [self.warehouse_size - 1] * 2
-        self.warehouse_size = 10
-
-        # should be in agent
-        self.agent_x, self.agent_y = 0, 0 
-        self.goal_box_state = [0, 0, 0, 0, 0]
-        self.agent_has_box = False
+        self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
         
-        # States of boxes
-        self.box_states = [0, 0, 0, 0, 0]
-
-
-    # Creates a tuple that represents the state of boxes 
-    def BoxStates(self):
-        """(status of box1, status of box2...)
-
-        Returns:
-            Tuple: State representation tuple of the warehouse
-        """
-        # The tuple returned should be like this:
-        # (status of box1, status of box2...)
-        # 0 is box sitting in the start space
-        # 1 is box sitting in the goal space
-        # 2 is box stacked in the goal space
-        # 3 is box currently being carried by the agent
+        self.policy = {}
+        self.states = []
         
-        box_states = []
-        
-                
-        
-        
-        
-    # Display the state representation tuple of the warehouse
-    def Display(self):
-        print(self.StateRepresentation())
+    def CalculateAllStates(self):
+        for x in range(WAREHOUSE_SIZE):
+            for y in range(WAREHOUSE_SIZE):
+                for b1 in range(4):
+                    for b2 in range(4):
+                        for b3 in range(4):
+                            for b4 in range(4):
+                                for b5 in range(4):
+                                    # Skip adding state if multiple boxes are marked as being carried
+                                    if [b1, b2, b3, b4, b5].count(3) > 1:
+                                        continue
+                                        
+                                    # Sets initial BoxID of position, based on box initial positions
+                                    if (x,y) not in self.box_initial_locations:
+                                        self.states.append((x, y, b1, b2, b3, b4, b5, 0))
+                                    else:
+                                        self.states.append(x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x,y)) + 1)
+                                    
+    
+    # Check if the boxes are stacked in the correct order
+    def CheckStackOrder(self, state, box):
+        for i in range(1, box):
+            if state[i+2] == 0:
+                return False
+        return True
     
     
-    # Check the current box stack order is valid, if not, reset the stack
-    def CheckStackOrder(self):
-        for i in range(4):
-            if self.goal_box_stack[i] != 0 and self.goal_box_stack[i] != i + 1:
-                for i in range(4):
-                    if self.goal_box_stack[i] != 0: 
-                        self.goal_box_stack[i] = 0  
+    # TODO: make this function cache results
+    # Given a state and action, return a tuple of states with probabilities of each state
+    def Transition(self, state, action):
+        state_list = []
+        
+        if action[0] == 'move':
+            x = state[0]
+            y = state[1]
 
+            def getMov(dir):
+                xdir = [0, 1, 0, -1][dir]
+                ydir = [-1, 0, 1, 0][dir]
+                return (xdir,ydir)
 
-    # Move the agent, given cordinates and desired action, output new cordinates 
-    def MoveAgent(self, current_position, action):
-        # Represent the action as an integer
-        direction = possible_dirs.index(action)
-        
-        # Use random to determine if move is successful
-        random_num = random.random()
-        
-        doubleMove = False
-        
-        # Check for failed moves
-        if random_num < 0.05:
-            # Slide left
-            direction = (direction - 1) % 4
-        elif random_num < 0.1:
-            # Slide right
-            direction = (direction + 1) % 4
-        elif random_num < 0.2:
-            # Move double
-            doubleMove = True
-        
-        # Move the agent in the desired direction if allowed
-        xmov = [0,1,0,-1][direction]
-        ymov = [1,0,-1,0][direction]
+            originalDirection = POSSIBLE_DIRS.index(action[1])
+            xmov,ymov = getMov(originalDirection)
+            if not(0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE):
+                return None
 
-        if doubleMove:
+            # left
+            direction = (originalDirection - 1) % 4
+
+            xmov,ymov = getMov(direction)
+            if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
+                # if (x + xmov, y + ymov, *state[2:]) doesn't work as expected, fix this & other occurences
+                state_list.append(((x + xmov, y + ymov, *state[2:]),0.05))            
+
+            # right
+            direction = (originalDirection + 1) % 4 
+
+            xmov,ymov = getMov(direction)
+            if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
+                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.05))   
+
+            # double & regular move
+            xmov, ymov = getMov(originalDirection)
             xmov *= 2
             ymov *= 2
-
-        # Ensure the agent stays within the warehouse
-        # May be more performant to do ifs vs max of min
-        xpos = max(min(current_position[0] + xmov, 0), self.warehouse_size - 1)
-        ypos = max(min(current_position[1] + ymov, 0), self.warehouse_size - 1)
-
-        return (xpos, ypos)
-                
-
-    # Don't take invalid pickup/stack/setdown actions
-    def TakeAction(self, state, action):
-        if action in possible_dirs:
-            location = (state[0], state[1])
-            new_position = self.MoveAgent(action, location)
             
-            if new_position in self.box_initial_locations:
-                boxID_in_location = self.box_initial_locations.index(new_position) + 1
+            if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
+                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.1))
+
+                xmov, ymov = getMov(originalDirection)
+                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.8))   
             else:
-                boxID_in_location = 0
-            
-            return (new_position[0], new_position[1], state[2], state[3], state[4], state[5], state[6], boxID_in_location)
-        
-        elif action == 'pickup':
-            self.agent_has_box = True
-            state_list = list(state)
-            # Set the box to being carried,  does not check if box is in location or already being carried
-            state_list[7] = 3
-            return tuple(state_list)
-            
-        elif action == 'stack':
-            self.CheckStackOrder()
-            
-        elif action == 'setdown':
-            pass
+                xmov, ymov = getMov(originalDirection)
+                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.9))   
            
-    
-    # Get the starting location of a box
-    def GetBoxLoc(self, box):
-        return self.box_initial_locations[box]
-
-
-
-
-    def cached_function():
-        cache = {}
-
-        def __function(state, other_parameters):
+        elif action[0] == "stack":
+            if (state[0], state[1]) != self.goal_location:
+                return None
+            else:
+                new_state = list(state)
+                if self.CheckStackOrder(state, int(action[1])):
+                    # Stack the box
+                    new_state[int(action[1])+2] = 2
+                else:
+                    # Unstack all boxes
+                    for i in range(1,6):
+                        if state[i+2] == 2:
+                            new_state[i+2] = 1
+                state_list.append(tuple(new_state),1)
+                
+        # Calculate possible stack results
+        elif action[0] == "setdown":
+            # Not in goal or no box carried
+            if (state[0], state[1]) != self.goal_location or 3 not in state[2:7]:
+                return None
+            new_state = list(state)
+            new_state[new_state[2:7].index(3)] = 1
+            state_list.append(tuple(new_state),1)
+        
+        elif action[0] == "pickup":
+            # double check later to make sure state[state[7]+2] is right for checking that the box that should be here has been picked up
             
-            if state not in cache:
-                # do anything needed with state, like pulling possible actions
-                cache[state] = # something
+            # no box initially starts here, the box that's supposed to be here has been picked up, or we are already carrying a box# double check
+            if state[7] == 0 or state[state[7]+2] != 0 or 3 in state[2:7]:
+                return None
+            
+            new_state = list(state)
+            new_state[state[7]+2] = 3
+            state_list.append(tuple(new_state),1)
 
-            return cache[state]
-
-        return __function
-
-    function_that_uses_cache = cached_function()
-
-
-# ---------------------------- Agent Class ----------------------------
+        return state_list
 
 
-class Agent:
-    def __init__(self):
-        self.x = 0
-        self.y = 0
+    # Given a state and action, return the reward value of the action
+    def Reward(self, state, action):
+        # Reward positive/negative for stacking based on order
+        if action[0] == 'stack':
+            if self.CheckStackOrder(state, int(action[1])):
+                return 10
+            else:
+                return -50 
         
+        # Positive reward for setting down in goal location
+        if action[0] == 'setdown':
+            if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
+                return 5 
+
+        # Positive reward for being in goal location
+        if (state[0], state[1]) == self.goal_location: # also based on action?
+                return 2
+
+        # Penalty for moving
+        if action[0] == 'move':
+            return -1
+            
+        # Small positive reward for picking up a box
+        if action[0] == 'pickup':
+            return 5 
+            
+    
+    # def ValueIteration(self):
+    #     self.CalculateAllStates()
+    #     self.V = np.zeros((len(self.states))).astype('float32').reshape(-1,1)
+    #     self.Q =  np.zeros((len(self.states), len(self.actions))).astype('float32')
+    #     max_trials = 1000
+    #     epsilon = 0.00001
+    #     initialize_bestQ = -10000
+    #     curr_iter = 0
         
-    # Get the agent's location
-    def GetLocation(self):
-        return [self.x, self.y]
+    #     bestAction = np.full((len(self.states)), -1)
+        
+    #     start_time = time.time()
+        
+    #     while curr_iter < max_trials:
+    #         max_residual = 0
+    #         curr_iter += 1
+    #         print("Current Iteration = ", curr_iter)
+            
+    #         # Loop over states to calculate values
+    #         for state in self.states:
+    #             if state
+
+        
+    #     end_time = time.time()
+        
+    #     print("Time taken to solve (seconds): ", end_time - start_time)
     
     
-# Initialize the warehouse and print it
-state = State()
-agent = Agent()
-
-state.MoveAgent('right')
-
+    # def QValueCalculation(self, state, action):
+    #     qAction = 0
+    #     succesorStates = self.Transition(state, action)
