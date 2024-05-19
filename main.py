@@ -7,7 +7,7 @@ import numpy as np
 # boxID in current position 0: No box, boxes 1-5
 # Boxes can only stack in decreasing order
 
-POSSIBLE_DIRS = ['up', 'right', 'down', 'left']
+POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
 WAREHOUSE_SIZE = 10
 
 class State:
@@ -140,6 +140,11 @@ class State:
             new_state[state[7]+2] = 3
             state_list.append(tuple(new_state),1)
 
+        self.PrintWarehouse(state)
+
+        for s in state_list:
+            self.PrintWarehouse(s[0])
+
         return state_list
 
 
@@ -168,7 +173,18 @@ class State:
         # Small positive reward for picking up a box
         if action[0] == 'pickup':
             return 5 
-            
+    
+    def PrintWarehouse(self, state):
+        for i in range(WAREHOUSE_SIZE):
+            for j in range(WAREHOUSE_SIZE):
+                if (i,j) == (state[0], state[1]):
+                    print("A", end = " ")
+                elif (i,j) == self.goal_location:
+                    print("G", end = " ")
+                else:
+                    print(".", end = " ")
+            print()
+        print()
     
     # def ValueIteration(self):
     #     self.CalculateAllStates()
@@ -205,6 +221,6 @@ class State:
 
 warehouse = State()
 
-warehouse.Transition((0, 0, 0, 0, 0, 3, 2, 0), ('move', 'down'))
+warehouse.Transition((3, 3, 0, 0, 0, 3, 2, 0), ('move', 'left'))
 
 print()
