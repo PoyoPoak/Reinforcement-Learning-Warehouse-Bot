@@ -49,8 +49,18 @@ class State:
         print("Agent Location: ", state[0], state[1])
         print("Boxes: ", state[2:7])
         print("BoxID in current location: ", state[7])
+        
+    def PrintWarehouse(self, state):
+        for i in range(WAREHOUSE_SIZE):
+            for j in range(WAREHOUSE_SIZE):
+                if (i,j) == (state[0], state[1]):
+                    print("A", end = " ")
+                elif (i,j) == self.goal_location:
+                    print("G", end = " ")
+                else:
+                    print(".", end = " ")
+            print()
         print()
-    
     
     # TODO: make this function cache results
     # Given a state and action, return a tuple of states with probabilities of each state
@@ -137,12 +147,14 @@ class State:
                 return None
             
             new_state = list(state)
-            new_state[state[7]+2] = 3
-            state_list.append(tuple(new_state),1)
+            new_state[state[7]+1] = 3
+            state_list.append((tuple(new_state), 1))
 
+        self.PrintState(state)
         self.PrintWarehouse(state)
 
         for s in state_list:
+            self.PrintState(s[0])
             self.PrintWarehouse(s[0])
 
         return state_list
@@ -174,17 +186,7 @@ class State:
         if action[0] == 'pickup':
             return 5 
     
-    def PrintWarehouse(self, state):
-        for i in range(WAREHOUSE_SIZE):
-            for j in range(WAREHOUSE_SIZE):
-                if (i,j) == (state[0], state[1]):
-                    print("A", end = " ")
-                elif (i,j) == self.goal_location:
-                    print("G", end = " ")
-                else:
-                    print(".", end = " ")
-            print()
-        print()
+
     
     # def ValueIteration(self):
     #     self.CalculateAllStates()
@@ -218,9 +220,8 @@ class State:
     #     qAction = 0
     #     succesorStates = self.Transition(state, action)
 
-
 warehouse = State()
 
-warehouse.Transition((3, 3, 0, 0, 0, 3, 2, 0), ('move', 'left'))
+warehouse.Transition((3, 5, 0, 0, 0, 0, 0, 1), ("pickup", 0))
 
 print()
