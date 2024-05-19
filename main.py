@@ -136,8 +136,9 @@ class State:
             if (state[0], state[1]) != self.goal_location or 3 not in state[2:7]:
                 return None
             new_state = list(state)
-            new_state[new_state[2:7].index(3)] = 1
-            state_list.append(tuple(new_state),1)
+            box_idx = state[2:7].index(3) + 2 
+            new_state[box_idx] = 1
+            state_list.append((tuple(new_state), 1))
         
         elif action[0] == "pickup":
             # double check later to make sure state[state[7]+2] is right for checking that the box that should be here has been picked up
@@ -152,6 +153,8 @@ class State:
 
         self.PrintState(state)
         self.PrintWarehouse(state)
+
+        print("--------------------------------------")
 
         for s in state_list:
             self.PrintState(s[0])
@@ -222,6 +225,6 @@ class State:
 
 warehouse = State()
 
-warehouse.Transition((3, 5, 0, 0, 0, 0, 0, 1), ("pickup", 0))
+warehouse.Transition((9, 9, 0, 0, 0, 0, 3, 1), ("setdown", 0))
 
 print()
