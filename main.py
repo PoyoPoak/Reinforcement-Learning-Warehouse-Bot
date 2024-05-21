@@ -2,19 +2,20 @@ import random
 import time
 import numpy as np
 
+# Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
+
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
 WAREHOUSE_SIZE = 10
 
-# Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, boxID of box in agent's location)
-
 class State:
     def __init__(self):
+        self.actions = [('move', dir) for dir in POSSIBLE_DIRS] + [('stack', i) for i in range(5)] + [('setdown', None), ('pickup', None)]
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
         self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
-        
+        self.gamma = 0.99
         self.policy = {}
         self.states = []
-        
+        self.CalculateAllStates()        
         
     def CalculateAllStates(self):
         """ Calculate all possible states (discluding impossible ones) stored in self.states """
@@ -34,6 +35,18 @@ class State:
                                         self.states.append((x, y, b1, b2, b3, b4, b5, 0))
                                     else:
                                         self.states.append((x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x,y)) + 1))
+              
+    
+    def CheckGoalState(self, state):
+        """ Check if the current state is the goal state
+
+        Args:
+            state (tuple): Current state of the warehouse
+
+        Returns:
+            bool: True if the state is the goal state, False otherwise.
+        """
+        return state == (9, 9, 2, 2, 2, 2, 2, 0)       
                                     
     
     def CheckStackOrder(self, state, box):
@@ -97,6 +110,14 @@ class State:
         """
         state_list = []
         
+        def update_box_id(new_state):  # <-- Change starts here
+            x, y = new_state[0], new_state[1]
+            if (x, y) in self.box_initial_locations:
+                box_id = self.box_initial_locations.index((x, y)) + 1
+            else:
+                box_id = 0
+            return new_state[:7] + (box_id,)  # <-- Change ends here
+        
         if action[0] == 'move':
             x = state[0]
             y = state[1]
@@ -115,7 +136,8 @@ class State:
             direction = (originalDirection - 1) % 4
             xmov,ymov = getMov(direction)
             if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
-                state_list.append(((x + xmov, y + ymov, *state[2:]),0.05)) 
+                new_state = (x + xmov, y + ymov, *state[2:])
+                state_list.append((update_box_id(new_state), 0.05))
             else:
                 state_list.append((state,0.05))
 
@@ -123,7 +145,8 @@ class State:
             direction = (originalDirection + 1) % 4 
             xmov,ymov = getMov(direction)
             if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
-                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.05))
+                new_state = (x + xmov, y + ymov, *state[2:])
+                state_list.append((update_box_id(new_state), 0.05))
             else:
                 state_list.append((state,0.05))
 
@@ -133,12 +156,15 @@ class State:
             ymov *= 2
             
             if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
-                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.1))
+                new_state = (x + xmov, y + ymov, *state[2:])
+                state_list.append((update_box_id(new_state), 0.1))
                 xmov, ymov = getMov(originalDirection)
-                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.8))   
+                new_state = (x + xmov, y + ymov, *state[2:])
+                state_list.append((update_box_id(new_state), 0.8))  
             else:
                 xmov, ymov = getMov(originalDirection)
-                state_list.append(((x + xmov, y + ymov, *state[2:]), 0.9))   
+                new_state = (x + xmov, y + ymov, *state[2:])
+                state_list.append((update_box_id(new_state), 0.9))   
            
         elif action[0] == "stack":
             if (state[0], state[1]) != self.goal_location:
@@ -172,12 +198,12 @@ class State:
             state_list.append((tuple(new_state), 1))
 
         # Test prints
-        self.PrintState(state)
-        self.PrintWarehouse(state)
-        print("--------------------------------------")
-        for s in state_list:
-            self.PrintState(s[0])
-            self.PrintWarehouse(s[0])
+        # self.PrintState(state)
+        # self.PrintWarehouse(state)
+        # print("--------------------------------------")
+        # for s in state_list:
+        #     self.PrintState(s[0])
+        #     self.PrintWarehouse(s[0])
 
         return state_list
 
@@ -192,7 +218,9 @@ class State:
         Returns:
             float: Reward for the given state and action
         """
-        # Reward positive/negative for stacking based on order
+        if action[0] == 'end':
+            return 100
+
         if action[0] == 'stack':
             if self.CheckStackOrder(state, int(action[1])):
                 return 10
@@ -211,6 +239,76 @@ class State:
             
         if action[0] == 'pickup':
             return 5 
-    
-    
-    
+        
+        
+    def ValueIteration(self):
+        """ Runs value iteration """
+        self.V = np.zeros((len(self.states))).astype('float32').reshape(-1,1)
+        self.Q =  np.zeros((len(self.states), len(self.actions))).astype('float32')
+        max_trials = 1000
+        epsilon = 0.00001
+        initialize_bestQ = -10000
+        curr_iter = 0
+        bestAction = np.full((len(self.states)), -1)
+        
+        start = time.time()
+        
+        while curr_iter < max_trials:
+            max_residual = 0
+            curr_iter += 1
+            print('Iteration: ', curr_iter)
+            
+            # Loop over states to calculate values
+            for idx, s, in enumerate(self.states):
+                # print("Index: ", idx, "State: ", s)
+                if self.CheckGoalState(s): # Goal state
+                    bestAction[idx] = 0
+                    self.V[idx] = self.Reward(s, 'end')    
+                    
+                bestQ = initialize_bestQ
+                
+                for na, action in enumerate(self.actions):
+                    possible_states = self.Transition(s, action)  # Get possible next states and probabilities
+                    if not possible_states:
+                        continue
+
+                    qaction = self.qValue(s, action, possible_states)
+                    self.Q[idx][na] = qaction
+
+                    if qaction > bestQ:
+                        bestQ = qaction
+                        bestAction[idx] = na
+
+                residual = abs(bestQ - self.V[idx][0]) 
+                self.V[idx][0] = bestQ
+                max_residual = max(max_residual, residual)
+
+            if max_residual < epsilon:
+                break
+
+        self.policy = bestAction
+
+        end = time.time()
+        print('Time taken to solve (seconds): ', end - start)
+        
+    def qValue(self, s, action, possible_states):
+        """ Calculate the Q-value for a given state and action """
+        initialize_bestQ = -10000
+        qAction = 0
+        
+        succ_list = possible_states
+        if succ_list is not None:
+            for succ in succ_list:
+                succ_state_id = self.states.index(succ[0])
+                prob = succ[1]
+
+                qAction = prob * (self.Reward(s, action) + self.gamma * self.V[succ_state_id][0]) + qAction
+
+            return qAction
+        
+        else:
+            return initialize_bestQ
+
+warehouse = State()
+warehouse.ValueIteration()
+print()
