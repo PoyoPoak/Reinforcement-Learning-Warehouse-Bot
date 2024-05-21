@@ -18,6 +18,7 @@ class State:
         self.policy = {}
         self.states = []
         
+        
     def CalculateAllStates(self):
         for x in range(WAREHOUSE_SIZE):
             for y in range(WAREHOUSE_SIZE):
@@ -39,16 +40,19 @@ class State:
     
     # Check if the boxes are stacked in the correct order
     def CheckStackOrder(self, state, box):
-        for i in range(1, box):
-            if state[i+2] == 0:
-                return False
-        return True
-    
+        if state[box + 2] == 2:  # Check if the box is already stacked
+            return False
+        current_stack = [i for i in range(5) if state[i + 2] == 2]
+        if not current_stack:  # No boxes stacked, any box can be stacked
+            return True
+        return all(box < stacked_box for stacked_box in current_stack)
+
     
     def PrintState(self, state):    
         print("Agent Location: ", state[0], state[1])
         print("Boxes: ", state[2:7])
         print("BoxID in current location: ", state[7])
+        
         
     def PrintWarehouse(self, state):
         for i in range(WAREHOUSE_SIZE):
@@ -61,6 +65,7 @@ class State:
                     print(".", end = " ")
             print()
         print()
+    
     
     # TODO: make this function cache results
     # Given a state and action, return a tuple of states with probabilities of each state
@@ -124,11 +129,10 @@ class State:
                     # Stack the box
                     new_state[int(action[1])+2] = 2
                 else:
-                    # Unstack all boxes
-                    for i in range(1,6):
-                        if state[i+2] == 2:
-                            new_state[i+2] = 1
-                state_list.append(tuple(new_state),1)
+                    for i in range(5):  # Collapse the stack if order is incorrect
+                        if state[i + 2] == 2:
+                            new_state[i + 2] = 1
+                state_list.append((tuple(new_state), 1))
                 
         # Calculate possible stack results
         elif action[0] == "setdown":
@@ -223,8 +227,9 @@ class State:
     #     qAction = 0
     #     succesorStates = self.Transition(state, action)
 
+
 warehouse = State()
 
-warehouse.Transition((9, 9, 0, 0, 0, 0, 3, 1), ("setdown", 0))
+warehouse.Transition((9, 9, 1, 2, 1, 2, 2, 0), ("stack", 2))
 
 print()
