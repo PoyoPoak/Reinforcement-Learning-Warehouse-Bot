@@ -1,7 +1,6 @@
 import random
 import time
 import numpy as np
-
 # Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
@@ -110,13 +109,13 @@ class State:
         """
         state_list = []
         
-        def update_box_id(new_state):  # <-- Change starts here
+        def update_box_id(new_state):  
             x, y = new_state[0], new_state[1]
             if (x, y) in self.box_initial_locations:
                 box_id = self.box_initial_locations.index((x, y)) + 1
             else:
                 box_id = 0
-            return new_state[:7] + (box_id,)  # <-- Change ends here
+            return new_state[:7] + (box_id,)
         
         if action[0] == 'move':
             x = state[0]
@@ -245,8 +244,8 @@ class State:
         """ Runs value iteration """
         self.V = np.zeros((len(self.states))).astype('float32').reshape(-1,1)
         self.Q =  np.zeros((len(self.states), len(self.actions))).astype('float32')
-        max_trials = 1000
-        epsilon = 0.00001
+        max_trials = 100
+        epsilon = 0.01
         initialize_bestQ = -10000
         curr_iter = 0
         bestAction = np.full((len(self.states)), -1)
@@ -260,16 +259,17 @@ class State:
             
             # Loop over states to calculate values
             for idx, s, in enumerate(self.states):
-                # print("Index: ", idx, "State: ", s)
-                if self.CheckGoalState(s): # Goal state
+                if self.CheckGoalState(s): # Check for goal state
                     bestAction[idx] = 0
-                    self.V[idx] = self.Reward(s, 'end')    
-                    
+                    self.V[idx] = self.Reward(s, ('end', None))  
+                    continue
+                
                 bestQ = initialize_bestQ
                 
                 for na, action in enumerate(self.actions):
                     possible_states = self.Transition(s, action)  # Get possible next states and probabilities
-                    if not possible_states:
+                    
+                    if not possible_states: # If no possible states, continue
                         continue
 
                     qaction = self.qValue(s, action, possible_states)
@@ -283,30 +283,44 @@ class State:
                 self.V[idx][0] = bestQ
                 max_residual = max(max_residual, residual)
 
+            print('Max Residual: ', max_residual)
+
             if max_residual < epsilon:
                 break
 
         self.policy = bestAction
 
         end = time.time()
-        print('Time taken to solve (seconds): ', end - start)
+        print('Time taken to solve (minutes): ', (end - start) / 60)
+        
         
     def qValue(self, s, action, possible_states):
-        """ Calculate the Q-value for a given state and action """
+        """ Calculate the Q-value of a given state and action
+
+        Args:
+            s (tuple): Current state of the warehouse   
+            action (tuple): Action to be taken (e.g. ('move', 'left') or ('stack', 2)
+            possible_states (list): List of next possible states with action probabilities
+
+        Returns:
+            float: Q-value of the given state and action
+        """
         initialize_bestQ = -10000
         qAction = 0
-        
         succ_list = possible_states
-        if succ_list is not None:
-            for succ in succ_list:
-                succ_state_id = self.states.index(succ[0])
-                prob = succ[1]
 
+        
+        if succ_list is not None: # If there are possible states
+            for succ in succ_list: # Loop over all the possible next states
+                succ_state_id = self.states.index(succ[0]) # Denotes s'
+                prob = succ[1] # Denotes the transition probability, for the next state
+
+                # Calculate Q-value
                 qAction = prob * (self.Reward(s, action) + self.gamma * self.V[succ_state_id][0]) + qAction
 
             return qAction
         
-        else:
+        else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
 
 warehouse = State()
