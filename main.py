@@ -14,7 +14,8 @@ class State:
         self.gamma = 0.99
         self.policy = {}
         self.states = []
-        self.CalculateAllStates()        
+        self.CalculateAllStates()
+        print("State space:",len(self.states))     
         
     def CalculateAllStates(self):
         """ Calculate all possible states (discluding impossible ones) stored in self.states """
@@ -95,7 +96,6 @@ class State:
         print()
     
     
-    # TODO: make this function cache results
     def Transition(self, state, action):
         """ Our transition function, returns a list of possible states and their probabilities.
 
@@ -109,17 +109,17 @@ class State:
         """
         state_list = []
         
-        def update_box_id(new_state):  
-            x, y = new_state[0], new_state[1]
-            if (x, y) in self.box_initial_locations:
-                box_id = self.box_initial_locations.index((x, y)) + 1
-            else:
-                box_id = 0
-            return new_state[:7] + (box_id,)
-        
         if action[0] == 'move':
             x = state[0]
             y = state[1]
+
+            def update_box_id(new_state):  
+                x, y = new_state[0], new_state[1]
+                if (x, y) in self.box_initial_locations:
+                    box_id = self.box_initial_locations.index((x, y)) + 1
+                else:
+                    box_id = 0
+                return new_state[:7] + (box_id,)
 
             def getMov(dir):
                 xdir = [0, 1, 0, -1][dir]
@@ -196,6 +196,9 @@ class State:
             new_state[state[7]+1] = 3
             state_list.append((tuple(new_state), 1))
 
+        else:
+            raise Exception("Invalid action")
+
         # Test prints
         # self.PrintState(state)
         # self.PrintWarehouse(state)
@@ -205,7 +208,6 @@ class State:
         #     self.PrintWarehouse(s[0])
 
         return state_list
-
 
     def Reward(self, state, action):
         """ Reward function. Returns the reward for a given state and action.
@@ -220,70 +222,74 @@ class State:
         if action[0] == 'end':
             return 100
 
-        if action[0] == 'stack':
+        elif action[0] == 'stack':
             if self.CheckStackOrder(state, int(action[1])):
                 return 10
             else:
                 return -50 
         
-        if action[0] == 'setdown':
+        elif action[0] == 'setdown':
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
                 return 5 
 
-        if (state[0], state[1]) == self.goal_location: # also based on action?
-                return 2
+        elif (state[0], state[1]) == self.goal_location: # also based on action?
+            return 2
 
-        if action[0] == 'move':
+        elif action[0] == 'move':
             return -1
             
-        if action[0] == 'pickup':
+        elif action[0] == 'pickup':
             return 5 
         
-        
+        else:
+            raise Exception("Invalid action")
+                
     def ValueIteration(self):
         """ Runs value iteration """
-        self.V = np.zeros((len(self.states))).astype('float32').reshape(-1,1)
-        self.Q =  np.zeros((len(self.states), len(self.actions))).astype('float32')
+        self.V = np.zeros(len(self.states),dtype=np.float16)
         max_trials = 100
         epsilon = 0.01
         initialize_bestQ = -10000
         curr_iter = 0
-        bestAction = np.full((len(self.states)), -1)
+        bestAction = np.full(len(self.states), -1,dtype=np.byte)
         
         start = time.time()
+
+        self.P = np.zeros((len(self.actions),len(self.states)),dtype=object)
         
         while curr_iter < max_trials:
+            iter_start = time.time()
             max_residual = 0
             curr_iter += 1
             print('Iteration: ', curr_iter)
             
+            bestQ = np.full_like(self.V, initialize_bestQ,dtype=np.float16)
             # Loop over states to calculate values
             for idx, s, in enumerate(self.states):
                 if self.CheckGoalState(s): # Check for goal state
                     bestAction[idx] = 0
-                    self.V[idx] = self.Reward(s, ('end', None))  
+                    bestQ[idx] = self.Reward(s, ('end', None))  
                     continue
                 
-                bestQ = initialize_bestQ
-                
                 for na, action in enumerate(self.actions):
-                    possible_states = self.Transition(s, action)  # Get possible next states and probabilities
-                    
-                    if not possible_states: # If no possible states, continue
+                    if self.P[na,idx] == None: # If no possible states, continue
                         continue
 
-                    qaction = self.qValue(s, action, possible_states)
-                    self.Q[idx][na] = qaction
+                    # If this state action pair hasn't been evaluated yet, store it in probabilities
+                    elif self.P[na,idx] == 0:
+                        self.P[na,idx] = self.Transition(s, action)
 
-                    if qaction > bestQ:
-                        bestQ = qaction
+                    qaction = self.qValue(s, action, self.P[na,idx])
+
+                    if qaction > bestQ[idx]:
+                        bestQ[idx] = qaction
                         bestAction[idx] = na
+            
+            residual = np.abs(bestQ - self.V)
+            self.V = bestQ
+            max_residual = max(max_residual,np.max(residual))
 
-                residual = abs(bestQ - self.V[idx][0]) 
-                self.V[idx][0] = bestQ
-                max_residual = max(max_residual, residual)
-
-            print('Max Residual: ', max_residual)
+            print('Max Residual:', max_residual, "time:",(time.time() - iter_start) / 60)
 
             if max_residual < epsilon:
                 break
@@ -293,8 +299,8 @@ class State:
         end = time.time()
         print('Time taken to solve (minutes): ', (end - start) / 60)
         
-        
-    def qValue(self, s, action, possible_states):
+    # __cache takes advantage of default paramaters to store a local dict that persists between function calls
+    def qValue(self, s, action, possible_states, __cache = {}): 
         """ Calculate the Q-value of a given state and action
 
         Args:
@@ -306,19 +312,20 @@ class State:
             float: Q-value of the given state and action
         """
         initialize_bestQ = -10000
-        qAction = 0
-        succ_list = possible_states
-
         
-        if succ_list is not None: # If there are possible states
-            for succ in succ_list: # Loop over all the possible next states
-                succ_state_id = self.states.index(succ[0]) # Denotes s'
-                prob = succ[1] # Denotes the transition probability, for the next state
+        if possible_states is not None: # If there are possible states
 
-                # Calculate Q-value
-                qAction = prob * (self.Reward(s, action) + self.gamma * self.V[succ_state_id][0]) + qAction
-
-            return qAction
+            if (s,action) not in __cache:
+                states,probabilities = zip(*possible_states)
+                indices = np.array([self.states.index(state) for state in states],dtype=int)
+                probabilities = np.array(probabilities,dtype=np.float16)
+                __cache[(s,action)] = (indices,probabilities)
+            else:
+                indices,probabilities = __cache[(s,action)]
+            
+            succ_sum = np.sum(probabilities * self.V[indices])
+            
+            return self.Reward(s, action) + self.gamma * succ_sum
         
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
