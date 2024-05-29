@@ -1,6 +1,8 @@
 import random
 import time
 import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 # Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
@@ -232,8 +234,8 @@ class State:
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
                 return 5 
 
-        elif (state[0], state[1]) == self.goal_location: # also based on action?
-            return 2
+        # elif (state[0], state[1]) == self.goal_location: # also based on action?
+        #     return 2
 
         elif action[0] == 'move':
             return -1
@@ -329,7 +331,85 @@ class State:
         
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
+        
+    def EveryVisitMonteCarlo(self, num_episodes = 500, gamma = 0.99, max_episode_length = 10000):
+        """ Runs the every visit Monte Carlo algorithm """
+        self.V = {state: np.random.rand() for state in self.states} # Randomly initialize value function
+        blankDict = {state: [] for state in self.states}
+        values_of_inital_state = []
+        for i in tqdm(range(num_episodes)):
+            state = (0,0,0,0,0,0,0,0) # Initialize episode
+            action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
+            episode = []
+            reward = self.Reward(state, action)
+            episode.append((state, action, reward))
+            episode_length = 0
+            while not self.CheckGoalState(state) and episode_length != max_episode_length: # Generate episode
+                # self.PrintWarehouse(state)
+                episode_length += 1
+                states = [state for state, probability in self.Transition(state, action)]
+                probabilities = [probability for state, probability in self.Transition(state, action)]
+                state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
+                action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
+                reward = self.Reward(state, action)
+                episode.append((state, action, reward))
+
+            episode_values = blankDict.copy() # Set up new value calc and storage
+            value = 0
+            episode.reverse()
+            for (state, action, reward) in episode: # Calculate and store discounted cumulative reward
+                value = reward + gamma * value
+                episode_values[state].append(value)
+            for state in episode_values.keys(): # Update value function with mean of episode values
+                if episode_values[state] != []:
+                    self.V[state] = np.mean(episode_values[state])
+            
+            values_of_inital_state.append(self.V[(0,0,0,0,0,0,0,0)]) # Store value of initial state
+        # Plot the value function of the initial state
+        self.plot(range(1, num_episodes+1), values_of_inital_state, "Episodes", "Average Value", "Average Value of Initial State vs Episodes")
+        
+        # display path
+        state = (0,0,0,0,0,0,0,0) # Initialize episode
+        action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
+        episode_length = 0
+        self.PrintWarehouse(state)
+        while not self.CheckGoalState(state) and episode_length != 30: # Generate episode
+            episode_length += 1
+            states = [state for state, probability in self.Transition(state, action)]
+            probabilities = [probability for state, probability in self.Transition(state, action)]
+            state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
+            action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
+            self.PrintWarehouse(state)
+
+
+
+    def getPossibleActions(self, state):
+        """ Get the possible actions from a state """
+        return [action for action in self.actions if self.Transition(state, action) is not None]
+    
+    def testQ(self, state, action):
+        """ Calculate the Q-value of a given state and action given the value of the immediate next states """
+        value = 0
+        for state, probability in self.Transition(state, action):
+            value += probability * self.V[state]
+        return value
+    
+    def plot(self, x, y, x_label, y_label, title):
+        plt.plot(x, y, 'o', label='original data')
+
+        # Calc regression line
+        coefficients = np.polyfit(x, y, 1)
+        polynomial = np.poly1d(coefficients)
+        regression_line = polynomial(x)
+        plt.plot(x, regression_line, 'r--', label='regression line')
+
+        plt.xlabel(x_label)
+        plt.ylabel(y_label)
+        plt.title(title)
+        plt.legend()
+        plt.show()
 
 warehouse = State()
-warehouse.ValueIteration()
-print()
+warehouse.EveryVisitMonteCarlo()
+# print()
+# test()
