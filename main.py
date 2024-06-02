@@ -48,6 +48,10 @@ class State:
         absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
         return absIndex - self.totalSkipped[absIndex]
               
+    def fastIndex(self, state):
+        """ Get the index of the provided state in self.states """
+        absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
+        return absIndex - self.totalSkipped[absIndex]
     
     def CheckGoalState(self, state):
         """ Check if the current state is the goal state
@@ -343,6 +347,47 @@ class State:
         
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
+        
+    def getPossibleActions(self, state):
+        """ Get the possible actions from a state """
+        return [action for action in self.actions if self.Transition(state, action) is not None]
+
+    def QLearning(self, num_episodes, alpha, epsilon, max_episode_length = 1000):
+        random_gen = np.random.Generator(np.random.PCG64())
+        self.Q = np.zeros((len(self.states),len(self.actions)),dtype=np.float16)
+
+        self.P = np.zeros(len(self.states),dtype=np.int32)
+
+        for _ in range(num_episodes):
+            state = (0,0,0,0,0,0,0,0)
+            
+            episode_length = 0
+            while not self.CheckGoalState(state) and episode_length < max_episode_length:
+                state_idx = self.fastIndex(state)
+
+                # Get epsilon greedy action
+                best_action = np.argmax(self.Q[state_idx])
+                if self.P[state_idx] == 0:
+                    self.P[state_idx] = [*map(self.actions.index,self.getPossibleActions(state))]
+                possible_actions = self.P[state_idx]
+                action = random_gen.choice(possible_actions, p = np.where(possible_actions == best_action, 1 - epsilon + epsilon/len(possible_actions), epsilon/len(possible_actions)))
+                action_idx = self.actions.index(action)
+
+                reward = self.Reward(state, action)
+
+                # Generate successor state
+                states, probabilities = zip(*self.Transition(state, action))
+                successor_state = random_gen.choice(states, p=probabilities)
+                successor_state_idx = self.fastIndex(successor_state)
+                if self.P[successor_state_idx] == 0:
+                    self.P[successor_state_idx] = [*map(self.actions.index,self.getPossibleActions(state))]
+                possible_successor_actions = self.P[successor_state_idx]
+
+                self.Q[state_idx,action_idx] = self.Q[state_idx,action_idx] + alpha * (reward + self.gamma * np.max(self.Q[successor_state_idx, possible_successor_actions]) - self.Q[state_idx, action_idx])
+
+                state = successor_state
+                episode_length += 1
+                
 
 warehouse = State()
 warehouse.ValueIteration()
