@@ -168,15 +168,17 @@ class State:
         elif action[0] == "stack":
             if (state[0], state[1]) != self.goal_location:
                 return None
-            else:
+            elif state[int(action[1])+3] == 1 and 3 not in state[2:7]: # only let try stack if box is on floor and not carrying a box
                 new_state = list(state)
-                if self.CheckStackOrder(state, int(action[1])): # stack
-                    new_state[int(action[1])+2] = 2 
+                if self.CheckStackOrder(state, int(action[1])): # stack if correct order
+                    new_state[int(action[1])+3] = 2
                 else: # unstack
                     for i in range(5):
                         if state[i + 2] == 2:
                             new_state[i + 2] = 1
                 state_list.append((tuple(new_state), 1))
+            else:
+                return None
                 
         elif action[0] == "setdown":
             if (state[0], state[1]) != self.goal_location or 3 not in state[2:7]:
@@ -189,7 +191,7 @@ class State:
         
         elif action[0] == "pickup":
             # no box initially starts here, the box that's supposed to be here has been picked up, or we are already carrying a box# double check
-            if state[7] == 0 or state[state[7]+2] != 0 or 3 in state[2:7]:
+            if state[7] == 0 or state[state[7]+1] != 0 or 3 in state[2:7]: # note: state[7] starts at 1 so only add 1 to get box index as state idx starts at 0
                 return None
             
             new_state = list(state)
