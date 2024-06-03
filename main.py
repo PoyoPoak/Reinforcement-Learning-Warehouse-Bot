@@ -19,6 +19,10 @@ class State:
         
     def CalculateAllStates(self):
         """ Calculate all possible states (discluding impossible ones) stored in self.states """
+        skipped = 0
+        self.totalSkipped = []
+
+        self.indexValues = [WAREHOUSE_SIZE * 4**5, 4**5, 4**4, 4**3, 4**2, 4**1, 1]
         for x in range(WAREHOUSE_SIZE):
             for y in range(WAREHOUSE_SIZE):
                 for b1 in range(4):
@@ -26,8 +30,10 @@ class State:
                         for b3 in range(4):
                             for b4 in range(4):
                                 for b5 in range(4):
+                                    self.totalSkipped.append(skipped)
                                     # Skip adding state if multiple boxes are marked as being carried
                                     if [b1, b2, b3, b4, b5].count(3) > 1:
+                                        skipped += 1
                                         continue
                                         
                                     # Sets initial BoxID of position, based on box initial positions
@@ -35,6 +41,12 @@ class State:
                                         self.states.append((x, y, b1, b2, b3, b4, b5, 0))
                                     else:
                                         self.states.append((x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x,y)) + 1))
+                                 
+                                        
+    def fastIndex(self, state):
+        """ Get the index of the provided state in self.states """
+        absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
+        return absIndex - self.totalSkipped[absIndex]
               
     
     def CheckGoalState(self, state):
@@ -319,7 +331,7 @@ class State:
 
             if (s,action) not in __cache:
                 states,probabilities = zip(*possible_states)
-                indices = np.array([self.states.index(state) for state in states],dtype=int)
+                indices = np.array([self.fastIndex(state) for state in states],dtype=int)
                 probabilities = np.array(probabilities,dtype=np.float16)
                 __cache[(s,action)] = (indices,probabilities)
             else:
