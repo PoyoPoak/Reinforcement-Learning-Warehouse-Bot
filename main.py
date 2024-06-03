@@ -168,10 +168,10 @@ class State:
         elif action[0] == "stack":
             if (state[0], state[1]) != self.goal_location:
                 return None
-            elif state[int(action[1])+3] == 1 and 3 not in state[2:7]: # only let try stack if box is on floor and not carrying a box
+            elif state[int(action[1])+2] == 1 and 3 not in state[2:7]: # only let try stack if box is on floor and not carrying a box
                 new_state = list(state)
                 if self.CheckStackOrder(state, int(action[1])): # stack if correct order
-                    new_state[int(action[1])+3] = 2
+                    new_state[int(action[1])+2] = 2
                 else: # unstack
                     for i in range(5):
                         if state[i + 2] == 2:
