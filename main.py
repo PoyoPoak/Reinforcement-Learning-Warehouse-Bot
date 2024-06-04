@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import itertools
+import multiprocessing as mp
 from multiprocessing import Pool
 import random
 
@@ -20,6 +21,7 @@ class State:
         self.policy = {}
         self.states = []
         self.CalculateAllStates()
+        self.residuals = []
         # print("State space:", len(self.states))     
         
     def CalculateAllStates(self):
@@ -265,8 +267,8 @@ class State:
     def ValueIteration(self):
         """ Runs value iteration """
         self.V = np.zeros(len(self.states), dtype=np.float16)
-        max_trials = 100
-        epsilon = 5.0
+        max_trials = 150
+        epsilon = 0.1
         initialize_bestQ = -10000
         curr_iter = 0
         bestAction = np.full(len(self.states), -1, dtype=np.byte)
@@ -275,8 +277,10 @@ class State:
 
         self.P = np.zeros((len(self.actions), len(self.states)), dtype=object)
         
+        # Initialize residuals list
+        self.residuals = []
+
         # Lists to store values for plotting and saving
-        residuals = []
         runtimes = []
         iteration_data = []
         
@@ -284,9 +288,9 @@ class State:
             iter_start = time.time()
             max_residual = 0
             curr_iter += 1
-            print('Iteration: ', curr_iter)
+            # print('Iteration: ', curr_iter)
             
-            bestQ = np.full_like(self.V, initialize_bestQ,dtype=np.float16)
+            bestQ = np.full_like(self.V, initialize_bestQ, dtype=np.float16)
             # Loop over states to calculate values
             for idx, s, in enumerate(self.states):
                 if self.CheckGoalState(s): # Check for goal state
@@ -295,14 +299,14 @@ class State:
                     continue
                 
                 for na, action in enumerate(self.actions):
-                    if self.P[na,idx] == None: # If no possible states, continue
+                    if self.P[na, idx] == None: # If no possible states, continue
                         continue
 
                     # If this state action pair hasn't been evaluated yet, store it in probabilities
-                    elif self.P[na,idx] == 0:
-                        self.P[na,idx] = self.Transition(s, action)
+                    elif self.P[na, idx] == 0:
+                        self.P[na, idx] = self.Transition(s, action)
 
-                    qaction = self.qValue(s, action, self.P[na,idx])
+                    qaction = self.qValue(s, action, self.P[na, idx])
 
                     if qaction > bestQ[idx]:
                         bestQ[idx] = qaction
@@ -310,17 +314,19 @@ class State:
             
             residual = np.abs(bestQ - self.V)
             self.V = bestQ
-            max_residual = max(max_residual,np.max(residual))
+            max_residual = max(max_residual, np.max(residual))
             
-            residuals.append(max_residual)
+            # Store residuals in the object
+            self.residuals.append(max_residual)
+
             runtime = time.time() - iter_start
-            runtimes.append(runtime)
+            # runtimes.append(runtime)
             
             # Store iteration data
             iteration_data.append([curr_iter, max_residual, runtime])
             
-            print('Max Residual:', max_residual, "time(m):", runtime / 60)
-
+            print('Iteration:', curr_iter, 'Max Residual:', max_residual, "time(m):", runtime / 60)
+            
             if max_residual < epsilon:
                 break
 
@@ -330,7 +336,7 @@ class State:
         print('Time taken to converge(m):', (end - start) / 60)
         
         # Plotting the results
-        self.plot_results(residuals, runtimes)
+        self.plot_results(self.residuals, runtimes)
         
         # Save results to CSV
         self.save_results_to_csv(iteration_data)
@@ -355,7 +361,7 @@ class State:
         ax2.set_title('Runtimes over Iterations')
 
         plt.tight_layout()
-        # plt.show()
+        plt.show()
         
     def save_results_to_csv(self, iteration_data):
         """ Save the iteration data to a CSV file
@@ -418,39 +424,69 @@ def evaluate_rewards(reward_params):
     return rewards, final_residual
 
 def main():
-    # Define the range of values you want to explore for each reward parameter
-    move_into_goal_range = range(1, 6)
-    good_stack_range = range(1, 6)
-    bad_stack_range = range(-50, 0, 10) 
-    setdown_range = range(1, 6)
-    pickup_range = range(1, 6)
+    # # Start timer
+    # start = time.time()
+    
+    # # Define the range of values you want to explore for each reward parameter
+    # move_into_goal_range = [1]
+    # good_stack_range = [0]
+    # bad_stack_range = [-500] 
+    # setdown_range = [1]
+    # pickup_range = [20]
 
-    # Create all possible combinations of reward parameters using itertools.product()
-    reward_combinations = list(itertools.product(move_into_goal_range, good_stack_range, bad_stack_range, setdown_range, pickup_range))
+    # # Create all possible combinations of reward parameters using itertools.product()
+    # reward_combinations = list(itertools.product(move_into_goal_range, good_stack_range, bad_stack_range, setdown_range, pickup_range))
 
-    # Shuffle the list to randomize the order of exploration
-    random.shuffle(reward_combinations)
+    # # Shuffle the list to randomize the order of exploration
+    # random.shuffle(reward_combinations)
 
-    # Create a pool of worker processes
-    with Pool() as pool:
-        # Evaluate reward parameters in parallel
-        results = pool.map(evaluate_rewards, reward_combinations)
 
-    best_reward_params = None
-    best_residual = float('inf')
+    # # Create a pool of worker processes
+    # with Pool(processes=16) as pool:
+    #     # Evaluate reward parameters in parallel
+    #     results = pool.map(evaluate_rewards, reward_combinations)
 
-    # Find the best reward parameters
-    for rewards, final_residual in results:
-        if final_residual < best_residual:
-            best_reward_params = rewards
-            best_residual = final_residual
+    # best_reward_params = None
+    # best_residual = float('inf')
 
-    # Print the best reward parameters and the corresponding best final residual found
-    print("Best reward parameters:", best_reward_params)
-    print("Best final residual:", best_residual)
+    # # Find the best reward parameters
+    # for rewards, final_residual in results:
+    #     if final_residual < best_residual:
+    #         best_reward_params = rewards
+    #         best_residual = final_residual
+            
+    # # End timer
+    # end = time.time()
+
+    # # Print the best reward parameters and the corresponding best final residual found
+    # print("Best reward parameters:", best_reward_params)
+    # print("Best final residual:", best_residual)
+    # print("Time taken(m):", (end - start) / 60)
+    
+    rewards = {
+        'move': -1,
+        'move_into_goal': 1,
+        'good_stack': 0,
+        'bad_stack': -500,
+        'setdown': 1,
+        'pickup': 20,
+        'end': 100
+    }
+    
+    oldrewards = {
+        'move': -1,
+        'move_into_goal': 2,
+        'good_stack': 10,
+        'bad_stack': -50,
+        'setdown': 5,
+        'pickup': 5,
+        'end': 100
+    }
+    
+    warehouse = State(rewards)
+    warehouse.ValueIteration()
+    
 
 if __name__ == "__main__":
     main()
-
-if __name__ == "__main__":
-    main()
+    
