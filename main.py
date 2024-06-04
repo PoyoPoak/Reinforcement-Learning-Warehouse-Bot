@@ -1,6 +1,7 @@
 import random
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 # Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
@@ -353,42 +354,72 @@ class State:
         return [action for action in self.actions if self.Transition(state, action) is not None]
 
     def QLearning(self, num_episodes, alpha, epsilon, max_episode_length = 1000):
-        random_gen = np.random.Generator(np.random.PCG64())
         self.Q = np.zeros((len(self.states),len(self.actions)),dtype=np.float16)
 
-        self.P = np.zeros(len(self.states),dtype=np.int32)
+        self.P = np.zeros(len(self.states),dtype=object)
+
+        runtimes = []
+        rewards = []
 
         for _ in range(num_episodes):
+            start_time = time.time()
+
             state = (0,0,0,0,0,0,0,0)
             
             episode_length = 0
+            accumulated_reward = 0
             while not self.CheckGoalState(state) and episode_length < max_episode_length:
                 state_idx = self.fastIndex(state)
 
                 # Get epsilon greedy action
-                best_action = np.argmax(self.Q[state_idx])
-                if self.P[state_idx] == 0:
-                    self.P[state_idx] = [*map(self.actions.index,self.getPossibleActions(state))]
+                if isinstance(self.P[state_idx],int) and self.P[state_idx] == 0:
+                    self.P[state_idx] = np.array([*map(self.actions.index,self.getPossibleActions(state))],dtype=np.int32)
                 possible_actions = self.P[state_idx]
-                action = random_gen.choice(possible_actions, p = np.where(possible_actions == best_action, 1 - epsilon + epsilon/len(possible_actions), epsilon/len(possible_actions)))
-                action_idx = self.actions.index(action)
+                best_action = possible_actions[np.argmax(self.Q[state_idx,possible_actions])]
+
+                action_idx = random.choices(possible_actions, k=1, weights = np.where(possible_actions == best_action, 1 - epsilon + epsilon/len(possible_actions), epsilon/len(possible_actions)))[0]
+                action = self.actions[action_idx]
 
                 reward = self.Reward(state, action)
+                accumulated_reward += reward
 
                 # Generate successor state
+
+                # TODO: cache states/probability outputs of Transition
                 states, probabilities = zip(*self.Transition(state, action))
-                successor_state = random_gen.choice(states, p=probabilities)
+
+                successor_state = random.choices(states, k=1, weights=probabilities)[0]
                 successor_state_idx = self.fastIndex(successor_state)
-                if self.P[successor_state_idx] == 0:
-                    self.P[successor_state_idx] = [*map(self.actions.index,self.getPossibleActions(state))]
+                if isinstance(self.P[successor_state_idx],int) and self.P[successor_state_idx] == 0:
+                    self.P[successor_state_idx] = np.array([*map(self.actions.index,self.getPossibleActions(successor_state))],dtype=np.int32)
                 possible_successor_actions = self.P[successor_state_idx]
 
                 self.Q[state_idx,action_idx] = self.Q[state_idx,action_idx] + alpha * (reward + self.gamma * np.max(self.Q[successor_state_idx, possible_successor_actions]) - self.Q[state_idx, action_idx])
 
                 state = successor_state
                 episode_length += 1
-                
+
+                if self.CheckGoalState(state):
+                    accumulated_reward += self.Reward(state, ('end', None))
+
+            rewards.append(accumulated_reward)
+
+            elapsed = time.time() - start_time
+            runtimes.append(elapsed)
+
+        print(f"Total runtime: {sum(runtimes)}      Average runtime per episode: {sum(runtimes)/len(runtimes)}")
+
+        # make a learning curve (plot of rewards?)
+        plt.figure()
+        plt.xlabel("Episode")
+        plt.ylabel("Reward")
+        plt.title("Q-learning Learning curve")
+        plt.bar(np.arange(len(rewards)),rewards)
+        plt.show()
+
+        # TODO: make a sample trajectory after finishing q learning training                
 
 warehouse = State()
-warehouse.ValueIteration()
+# warehouse.ValueIteration()
+warehouse.QLearning(100, 0.05, 0.4)
 print()
