@@ -3,20 +3,19 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-
-# Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
+import itertools
+from multiprocessing import Pool
+import random
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
 WAREHOUSE_SIZE = 10
-
-
 
 class State:
     def __init__(self, reward_params):
         self.actions = [('move', dir) for dir in POSSIBLE_DIRS] + [('stack', i) for i in range(5)] + [('setdown', None), ('pickup', None)]
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
         self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
-        self.reward_params = REWARDS
+        self.reward_params = reward_params
         self.gamma = 0.99
         self.policy = {}
         self.states = []
@@ -267,7 +266,7 @@ class State:
         """ Runs value iteration """
         self.V = np.zeros(len(self.states), dtype=np.float16)
         max_trials = 100
-        epsilon = 0.1
+        epsilon = 5.0
         initialize_bestQ = -10000
         curr_iter = 0
         bestAction = np.full(len(self.states), -1, dtype=np.byte)
@@ -320,7 +319,7 @@ class State:
             # Store iteration data
             iteration_data.append([curr_iter, max_residual, runtime])
             
-            print('Max Residual:', max_residual, "time:", runtime / 60)
+            print('Max Residual:', max_residual, "time(m):", runtime / 60)
 
             if max_residual < epsilon:
                 break
@@ -328,7 +327,7 @@ class State:
         self.policy = bestAction
 
         end = time.time()
-        print('Time taken to solve (minutes): ', (end - start) / 60)
+        print('Time taken to converge(m):', (end - start) / 60)
         
         # Plotting the results
         self.plot_results(residuals, runtimes)
@@ -398,17 +397,60 @@ class State:
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
 
+def evaluate_rewards(reward_params):
+    move_into_goal, good_stack, bad_stack, setdown, pickup = reward_params
+    rewards = {
+        'move': -1,
+        'move_into_goal': move_into_goal,
+        'good_stack': good_stack,
+        'bad_stack': bad_stack,
+        'setdown': setdown,
+        'pickup': pickup,
+        'end': 100
+    }
 
-# Example rewards parameters, write a binary search function to find and test for the best parameters
-REWARDS = {
-    'move': -1,             # Fixed
-    'move_into_goal': 1,    # 1 to 10
-    'good_stack': 10,       # 1 to 10
-    'bad_stack': -50,      # -50 to -1
-    'setdown': 5,           # 1 to 10
-    'pickup': 5,            # 1 to 10
-    'end': 100              # Fixed
-}
+    warehouse = State(rewards)
+    warehouse.ValueIteration()
 
-warehouse = State(REWARDS)
-warehouse.ValueIteration()
+    # Get the final residual from the value iteration
+    final_residual = warehouse.residuals[-1]
+
+    return rewards, final_residual
+
+def main():
+    # Define the range of values you want to explore for each reward parameter
+    move_into_goal_range = range(1, 6)
+    good_stack_range = range(1, 6)
+    bad_stack_range = range(-50, 0, 10) 
+    setdown_range = range(1, 6)
+    pickup_range = range(1, 6)
+
+    # Create all possible combinations of reward parameters using itertools.product()
+    reward_combinations = list(itertools.product(move_into_goal_range, good_stack_range, bad_stack_range, setdown_range, pickup_range))
+
+    # Shuffle the list to randomize the order of exploration
+    random.shuffle(reward_combinations)
+
+    # Create a pool of worker processes
+    with Pool() as pool:
+        # Evaluate reward parameters in parallel
+        results = pool.map(evaluate_rewards, reward_combinations)
+
+    best_reward_params = None
+    best_residual = float('inf')
+
+    # Find the best reward parameters
+    for rewards, final_residual in results:
+        if final_residual < best_residual:
+            best_reward_params = rewards
+            best_residual = final_residual
+
+    # Print the best reward parameters and the corresponding best final residual found
+    print("Best reward parameters:", best_reward_params)
+    print("Best final residual:", best_residual)
+
+if __name__ == "__main__":
+    main()
+
+if __name__ == "__main__":
+    main()
