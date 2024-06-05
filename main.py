@@ -235,7 +235,7 @@ class State:
             if self.CheckStackOrder(state, int(action[1])):
                 return 10
             else:
-                return -50 
+                return -10 * state[2:7].count(2)
         
         elif action[0] == 'setdown':
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
