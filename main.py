@@ -1,6 +1,7 @@
 import random
 import time
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 import itertools
@@ -23,6 +24,7 @@ class State:
         self.CalculateAllStates()
         self.residuals = []
         # print("State space:", len(self.states))     
+        
         
     def CalculateAllStates(self):
         """ Calculate all possible states (discluding impossible ones) stored in self.states """
@@ -62,6 +64,34 @@ class State:
         absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
         return absIndex - self.totalSkipped[absIndex]
               
+              
+    def PrintWarehouse(self, state, action=None, action_num=None):
+        """ Print the warehouse with the agent and goal location marked with 'A' and 'G' respectively """        
+        for i in range(WAREHOUSE_SIZE):
+            for j in range(WAREHOUSE_SIZE):
+                if (i,j) == (state[0], state[1]):
+                    print("A", end = " ")
+                elif (i,j) in self.box_initial_locations:
+                    print(f"B", end = " ")
+                elif (i,j) == self.goal_location:
+                    print("G", end = " ")
+                else:
+                    print(".", end = " ")
+            print()
+        print("- B1:", state[2], "- B2:", state[3], "- B3:", state[4], "- B4:", state[5], "- B5:", state[6], "action:", action, action_num)
+        print("reward:", self.Reward(state, action), "\n")
+    
+    
+    def PrintState(self, state):    
+        """ Print the current state of the agent
+
+        Args:
+            state (tuple): Current state of the warehouse
+        """
+        print("Agent Location: ", state[0], state[1])
+        print("Boxes: ", state[2:7])
+        print("BoxID in current location: ", state[7])
+    
     
     def CheckGoalState(self, state):
         """ Check if the current state is the goal state
@@ -95,31 +125,6 @@ class State:
         if not current_stack:  
             return True
         return all(box < stacked_box for stacked_box in current_stack)
-
-    
-    # def PrintState(self, state):    
-    #     """ Print the current state of the agent
-
-    #     Args:
-    #         state (tuple): Current state of the warehouse
-    #     """
-    #     print("Agent Location: ", state[0], state[1])
-    #     print("Boxes: ", state[2:7])
-    #     print("BoxID in current location: ", state[7])
-        
-        
-    # def PrintWarehouse(self, state):
-    #     """ Print the warehouse with the agent and goal location marked with 'A' and 'G' respectively """        
-    #     for i in range(WAREHOUSE_SIZE):
-    #         for j in range(WAREHOUSE_SIZE):
-    #             if (i,j) == (state[0], state[1]):
-    #                 print("A", end = " ")
-    #             elif (i,j) == self.goal_location:
-    #                 print("G", end = " ")
-    #             else:
-    #                 print(".", end = " ")
-    #         print()
-    #     print()
     
     
     def Transition(self, state, action):
@@ -229,6 +234,7 @@ class State:
 
         return state_list
 
+
     def Reward(self, state, action):
         """ Reward function. Returns the reward for a given state and action.
 
@@ -252,9 +258,6 @@ class State:
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
                 return self.reward_params['setdown']
 
-        elif (state[0], state[1]) == self.goal_location: # also based on action?
-            return self.reward_params['move_into_goal']
-
         elif action[0] == 'move':
             return self.reward_params['move']
             
@@ -264,113 +267,101 @@ class State:
         else:
             raise Exception("Invalid action")
                 
+                
     def ValueIteration(self):
         """ Runs value iteration """
         self.V = np.zeros(len(self.states), dtype=np.float16)
-        max_trials = 150
-        epsilon = 0.1
+        max_trials = 135
+        epsilon = 0.00001
         initialize_bestQ = -10000
         curr_iter = 0
-        bestAction = np.full(len(self.states), -1, dtype=np.byte)
-        
-        start = time.time()
-
         self.P = np.zeros((len(self.actions), len(self.states)), dtype=object)
-        
-        # Initialize residuals list
         self.residuals = []
+        self.policy_changes = []
 
-        # Lists to store values for plotting and saving
-        runtimes = []
-        iteration_data = []
-        
+        start = time.time()
         while curr_iter < max_trials:
             iter_start = time.time()
             max_residual = 0
             curr_iter += 1
-            # print('Iteration: ', curr_iter)
-            
+
             bestQ = np.full_like(self.V, initialize_bestQ, dtype=np.float16)
+            new_policy = np.full(len(self.states), -1, dtype=np.byte)
             # Loop over states to calculate values
             for idx, s, in enumerate(self.states):
                 if self.CheckGoalState(s): # Check for goal state
-                    bestAction[idx] = 0
+                    new_policy[idx] = 0
                     bestQ[idx] = self.Reward(s, ('end', None))  
                     continue
-                
+
                 for na, action in enumerate(self.actions):
-                    if self.P[na, idx] == None: # If no possible states, continue
+                    if self.P[na, idx] is None: # If no possible states, continue
                         continue
 
                     # If this state action pair hasn't been evaluated yet, store it in probabilities
-                    elif self.P[na, idx] == 0:
+                    if self.P[na, idx] == 0:
                         self.P[na, idx] = self.Transition(s, action)
 
                     qaction = self.qValue(s, action, self.P[na, idx])
 
                     if qaction > bestQ[idx]:
                         bestQ[idx] = qaction
-                        bestAction[idx] = na
-            
+                        new_policy[idx] = na
+
             residual = np.abs(bestQ - self.V)
             self.V = bestQ
             max_residual = max(max_residual, np.max(residual))
-            
+
             # Store residuals in the object
             self.residuals.append(max_residual)
 
+            # Calculate policy changes
+            if curr_iter > 1:
+                policy_change_count = np.sum(new_policy != self.policy)
+                self.policy_changes.append(policy_change_count)
+            else:
+                self.policy_changes.append(0)
+
+            self.policy = new_policy
+
             runtime = time.time() - iter_start
-            # runtimes.append(runtime)
-            
-            # Store iteration data
-            iteration_data.append([curr_iter, max_residual, runtime])
-            
+
             print('Iteration:', curr_iter, 'Max Residual:', max_residual, "time(m):", runtime / 60)
             
+
             if max_residual < epsilon:
                 break
 
-        self.policy = bestAction
-
         end = time.time()
         print('Time taken to converge(m):', (end - start) / 60)
-        
-        # Plotting the results
-        self.plot_results(self.residuals, runtimes)
-        
-        # Save results to CSV
-        self.save_results_to_csv(iteration_data)
-        
-    def plot_results(self, residuals, runtimes):
-        """ Plot the residuals and runtimes over iterations
 
-        Args:
-            residuals (list): List of residuals over iterations
-            runtimes (list): List of runtimes over iterations
-        """
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+        return curr_iter
 
-        ax1.plot(residuals)
+
+    def plot(self):
+        matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
+
+        fig, ax1 = plt.subplots()
+
+        color = 'tab:red'
         ax1.set_xlabel('Iteration')
-        ax1.set_ylabel('Max Residual')
-        ax1.set_title('Residuals over Iterations')
+        ax1.set_ylabel('Max Residual', color=color)
+        ax1.plot(range(len(self.residuals)), self.residuals, color=color)
+        ax1.tick_params(axis='y', labelcolor=color)
 
-        ax2.plot(runtimes, color='red')
-        ax2.set_xlabel('Iteration')
-        ax2.set_ylabel('Runtime (s)')
-        ax2.set_title('Runtimes over Iterations')
+        ax2 = ax1.twinx()
+        color = 'tab:blue'
+        ax2.set_ylabel('Policy Changes', color=color)
+        ax2.plot(range(len(self.policy_changes)), self.policy_changes, color=color)
+        ax2.tick_params(axis='y', labelcolor=color)
 
-        plt.tight_layout()
-        plt.show()
+        fig.tight_layout()
+        plt.title('Learning Curve and Policy Stability')
+        plt.savefig('learning_curve_and_policy_stability.png')
+        plt.close(fig)
+        print("Learning curve and policy stability plot saved as 'learning_curve_and_policy_stability.png'")
+
         
-    def save_results_to_csv(self, iteration_data):
-        """ Save the iteration data to a CSV file
-
-        Args:
-            iteration_data (list): List of iteration data
-        """
-        df = pd.DataFrame(iteration_data, columns=['Iteration', 'Max Residual', 'Runtime'])
-        df.to_csv('value_iteration_results.csv', index=False)
         
     # __cache takes advantage of default parameters to store a local dict that persists between function calls
     def qValue(self, s, action, possible_states, __cache={}): 
@@ -385,6 +376,9 @@ class State:
             float: Q-value of the given state and action
         """
         initialize_bestQ = -10000
+        
+        # self.PrintWarehouse(s, action)
+        # self.PrintState(s)
         
         if possible_states is not None: # If there are possible states
 
@@ -402,12 +396,20 @@ class State:
         
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
+        
+        
+    def save_policy_to_csv(self, filename='policy.csv'):
+        policy_list = [(self.states[i], self.policy[i]) for i in range(len(self.states))]
+        df = pd.DataFrame(policy_list, columns=['State', 'Action'])
+        df.to_csv(filename, index=False)
+        print(f"Policy saved to {filename}")
+
 
 def evaluate_rewards(reward_params):
-    move_into_goal, good_stack, bad_stack, setdown, pickup = reward_params
+    movement, good_stack, bad_stack, setdown, pickup = reward_params
+    
     rewards = {
-        'move': -1,
-        'move_into_goal': move_into_goal,
+        'move': movement,
         'good_stack': good_stack,
         'bad_stack': bad_stack,
         'setdown': setdown,
@@ -423,70 +425,69 @@ def evaluate_rewards(reward_params):
 
     return rewards, final_residual
 
-def main():
-    # # Start timer
-    # start = time.time()
+
+def tune_rewards():
+    # Start timer
+    start = time.time()
     
-    # # Define the range of values you want to explore for each reward parameter
-    # move_into_goal_range = [1]
-    # good_stack_range = [0]
-    # bad_stack_range = [-500] 
-    # setdown_range = [1]
-    # pickup_range = [20]
+    # Define the range of values you want to explore for each reward parameter
+    movement = [-0.5,-0.4,-0.3,-0.2,-0.1]
+    good_stack_range = [10]
+    bad_stack_range = [-50,-500] 
+    setdown_range = [5]
+    pickup_range = [5]
 
-    # # Create all possible combinations of reward parameters using itertools.product()
-    # reward_combinations = list(itertools.product(move_into_goal_range, good_stack_range, bad_stack_range, setdown_range, pickup_range))
+    # Create all possible combinations of reward parameters using itertools.product()
+    reward_combinations = list(itertools.product(movement, good_stack_range, bad_stack_range, setdown_range, pickup_range))
 
-    # # Shuffle the list to randomize the order of exploration
-    # random.shuffle(reward_combinations)
+    # Shuffle the list to randomize the order of exploration
+    random.shuffle(reward_combinations)
 
+    # Create a pool of worker processes
+    with Pool(processes=18) as pool:
+        # Evaluate reward parameters in parallel
+        results = pool.map(evaluate_rewards, reward_combinations)
 
-    # # Create a pool of worker processes
-    # with Pool(processes=16) as pool:
-    #     # Evaluate reward parameters in parallel
-    #     results = pool.map(evaluate_rewards, reward_combinations)
+    best_reward_params = None
+    best_residual = float('inf')
 
-    # best_reward_params = None
-    # best_residual = float('inf')
-
-    # # Find the best reward parameters
-    # for rewards, final_residual in results:
-    #     if final_residual < best_residual:
-    #         best_reward_params = rewards
-    #         best_residual = final_residual
+    # Find the best reward parameters
+    for rewards, final_residual in results:
+        if final_residual < best_residual:
+            best_reward_params = rewards
+            best_residual = final_residual
             
-    # # End timer
-    # end = time.time()
+    # End timer
+    end = time.time()
 
-    # # Print the best reward parameters and the corresponding best final residual found
-    # print("Best reward parameters:", best_reward_params)
-    # print("Best final residual:", best_residual)
-    # print("Time taken(m):", (end - start) / 60)
-    
-    rewards = {
+    # Print the best reward parameters and the corresponding best final residual found
+    print("Best reward parameters:", best_reward_params)
+    print("Time taken(m):", (end - start) / 60)
+
+
+def main():
+    # reward = {
+    #     'move': -1,
+    #     'good_stack': 20,
+    #     'bad_stack': -500,
+    #     'setdown': 5,
+    #     'pickup': 1,
+    #     'end': 100
+    # }
+    reward = {
         'move': -1,
-        'move_into_goal': 1,
-        'good_stack': 0,
-        'bad_stack': -500,
-        'setdown': 1,
-        'pickup': 20,
-        'end': 100
-    }
-    
-    oldrewards = {
-        'move': -1,
-        'move_into_goal': 2,
         'good_stack': 10,
-        'bad_stack': -50,
+        'bad_stack': -500,
         'setdown': 5,
         'pickup': 5,
         'end': 100
     }
-    
-    warehouse = State(rewards)
+
+    warehouse = State(reward)
     warehouse.ValueIteration()
-    
+    warehouse.plot()
+    warehouse.save_policy_to_csv('policy.csv')
 
 if __name__ == "__main__":
-    main()
-    
+    # main()
+    tune_rewards()
