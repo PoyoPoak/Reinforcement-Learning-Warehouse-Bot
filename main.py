@@ -3,7 +3,10 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import sys
+import os
 # Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
+# Box Status: 0: In starting space, 1: Sitting in the goal space, 2: Stacked in the goal, 3: currently being carried
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
 WAREHOUSE_SIZE = 10
@@ -83,22 +86,36 @@ class State:
         print("Boxes: ", state[2:7])
         print("BoxID in current location: ", state[7])
         
+        # Warehouse layout visualized
+        # ** ** ** ** ** ** ** ** ** **
+        # ** ** ** ** ** ** ** ** B2 **
+        # ** ** ** ** ** ** ** ** ** **
+        # ** ** ** ** ** B1 ** ** ** **
+        # ** ** ** ** ** ** ** ** ** **
+        # ** ** ** ** B3 ** ** ** ** **
+        # ** ** ** ** ** ** ** ** ** **
+        # ** ** B5 ** ** ** ** ** ** **
+        # ** ** ** ** ** ** ** ** ** **
+        # ** B4 ** ** ** ** ** ** ** G
         
-    def PrintWarehouse(self, state):
+    def PrintWarehouse(self, state, action=None, action_num=None):
         """ Print the warehouse with the agent and goal location marked with 'A' and 'G' respectively """        
         for i in range(WAREHOUSE_SIZE):
             for j in range(WAREHOUSE_SIZE):
                 if (i,j) == (state[0], state[1]):
                     print("A", end = " ")
+                elif (i,j) in self.box_initial_locations:
+                    print(f"B", end = " ")
                 elif (i,j) == self.goal_location:
                     print("G", end = " ")
                 else:
                     print(".", end = " ")
             print()
-        print()
+        print("- B1:", state[2], "- B2:", state[3], "- B3:", state[4], "- B4:", state[5], "- B5:", state[6], "action:", action, action_num)
+        print("reward:", self.Reward(state, action), "\n")
     
     
-    def Transition(self, state, action):
+    def Transition(self, state, action, __cache = {}):
         """ Our transition function, returns a list of possible states and their probabilities.
 
         Args:
@@ -109,6 +126,10 @@ class State:
             list: List of possible states and their probabilities. 
                     Ex: [((1, 2, 0, 0, 0, 0, 0, 0), 0.8), ((1, 3, 0, 0, 0, 0, 0, 0), 0.2) ...]
         """
+
+        if (state, action) in __cache:
+            return __cache[(state, action)]
+
         state_list = []
         
         if action[0] == 'move':
@@ -170,15 +191,17 @@ class State:
         elif action[0] == "stack":
             if (state[0], state[1]) != self.goal_location:
                 return None
-            else:
+            elif state[int(action[1])+2] == 1 and 3 not in state[2:7]: # only let try stack if box is on floor and not carrying a box
                 new_state = list(state)
-                if self.CheckStackOrder(state, int(action[1])): # stack
-                    new_state[int(action[1])+2] = 2 
+                if self.CheckStackOrder(state, int(action[1])): # stack if correct order
+                    new_state[int(action[1])+2] = 2
                 else: # unstack
                     for i in range(5):
                         if state[i + 2] == 2:
                             new_state[i + 2] = 1
                 state_list.append((tuple(new_state), 1))
+            else:
+                return None
                 
         elif action[0] == "setdown":
             if (state[0], state[1]) != self.goal_location or 3 not in state[2:7]:
@@ -191,7 +214,7 @@ class State:
         
         elif action[0] == "pickup":
             # no box initially starts here, the box that's supposed to be here has been picked up, or we are already carrying a box# double check
-            if state[7] == 0 or state[state[7]+2] != 0 or 3 in state[2:7]:
+            if state[7] == 0 or state[state[7]+1] != 0 or 3 in state[2:7]: # note: state[7] starts at 1 so only add 1 to get box index as state idx starts at 0
                 return None
             
             new_state = list(state)
@@ -209,6 +232,7 @@ class State:
         #     self.PrintState(s[0])
         #     self.PrintWarehouse(s[0])
 
+        __cache[(state, action)] = state_list
         return state_list
 
     def Reward(self, state, action):
@@ -221,14 +245,18 @@ class State:
         Returns:
             float: Reward for the given state and action
         """
-        if action[0] == 'end':
-            return 100
 
-        elif action[0] == 'stack':
+        if action[0] == 'stack':
             if self.CheckStackOrder(state, int(action[1])):
-                return 10
+                list_state = list(state)
+                list_state[int(action[1])+2] = 2
+                new_state = tuple(list_state)
+                if self.CheckGoalState(new_state):
+                    return 100
+                else:
+                    return 10
             else:
-                return -50 
+                return -40 
         
         elif action[0] == 'setdown':
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
@@ -332,68 +360,103 @@ class State:
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
         
-    def EveryVisitMonteCarlo(self, num_episodes = 500, gamma = 0.99, max_episode_length = 10000):
+    def EveryVisitMonteCarlo(self, num_episodes = 300000, max_episode_length = 300, epsilon = 0.05, gamma = 0.99):
         """ Runs the every visit Monte Carlo algorithm """
-        self.V = {state: np.random.rand() for state in self.states} # Randomly initialize value function
-        blankDict = {state: [] for state in self.states}
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        func_file_path = os.path.join(cwd, 'valueFunctions\\selfV.npy')
+        self.V = np.zeros(len(self.states),dtype=np.float16)
+        state_to_index = {state: idx for idx, state in enumerate(self.states)}
+        episode_times = []
+        episode_stacks = []
+        episode_lengths = []
         values_of_inital_state = []
         for i in tqdm(range(num_episodes)):
-            state = (0,0,0,0,0,0,0,0) # Initialize episode
-            action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
+            episode_start_time = time.time()
+            episode_stacks.append(0)
             episode = []
+            state = (0,0,0,0,0,0,0,0) # Initialize episode
+            action = self.eplisonGreedyAction(state, epsilon)
             reward = self.Reward(state, action)
             episode.append((state, action, reward))
             episode_length = 0
             while not self.CheckGoalState(state) and episode_length != max_episode_length: # Generate episode
-                # self.PrintWarehouse(state)
                 episode_length += 1
-                states = [state for state, probability in self.Transition(state, action)]
-                probabilities = [probability for state, probability in self.Transition(state, action)]
+                states, probabilities = zip(*self.Transition(state, action)) # Get possible states and their probabilities
                 state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
-                action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
+                action = self.eplisonGreedyAction(state, epsilon)
+                if action[0] == 'stack':
+                    episode_stacks[-1] += 1
                 reward = self.Reward(state, action)
                 episode.append((state, action, reward))
+            episode_lengths.append(episode_length)
 
-            episode_values = blankDict.copy() # Set up new value calc and storage
+            # Calculate Q-Values
+            encountered_states = set() # Set up new value calc and storage
+            episode_values = {}
             value = 0
-            episode.reverse()
-            for (state, action, reward) in episode: # Calculate and store discounted cumulative reward
+            for (state, action, reward) in reversed(episode): # Calculate and store discounted cumulative reward
                 value = reward + gamma * value
-                episode_values[state].append(value)
-            for state in episode_values.keys(): # Update value function with mean of episode values
-                if episode_values[state] != []:
-                    self.V[state] = np.mean(episode_values[state])
-            
-            values_of_inital_state.append(self.V[(0,0,0,0,0,0,0,0)]) # Store value of initial state
-        # Plot the value function of the initial state
-        self.plot(range(1, num_episodes+1), values_of_inital_state, "Episodes", "Average Value", "Average Value of Initial State vs Episodes")
+                if state not in encountered_states:
+                    episode_values[state] = np.array([], dtype=np.float16)
+                episode_values[state] = np.append(episode_values[state], value)
+                # print("reversed testing state", state, "episode_values[state]:", len(episode_values[state]), "values:", episode_values[state]) # , "episode_values[state]:", episode_values[state])
+                encountered_states.add(state)
+            for state in encountered_states: # Update value function with mean of episode values
+                # print("state", state, "episode_values[state]:", len(episode_values[state]), "value:", np.mean(episode_values[state])) # , "episode_values[state]:", episode_values[state])
+                self.V[state_to_index[state]] = np.mean(episode_values[state])
+
+            np.save(func_file_path, self.V) # Save value function
+
+            values_of_inital_state.append(int(self.V[0])) # Store value of initial state
+            episode_times.append(time.time() - episode_start_time) # Store episode time
         
-        # display path
-        state = (0,0,0,0,0,0,0,0) # Initialize episode
-        action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
-        episode_length = 0
-        self.PrintWarehouse(state)
-        while not self.CheckGoalState(state) and episode_length != 30: # Generate episode
-            episode_length += 1
-            states = [state for state, probability in self.Transition(state, action)]
-            probabilities = [probability for state, probability in self.Transition(state, action)]
-            state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
-            action = max([(self.testQ(state, action), action) for action in self.getPossibleActions(state)], key=lambda x: x[0])[1] # Choose action with highest value
-            self.PrintWarehouse(state)
+        print("Average episode time:", np.mean(episode_times), "seconds, Total time:", np.sum(episode_times)/60, "minutes")
+        self.plot(range(1, num_episodes+1), episode_times, "Episodes", "Time (s)", "Episode Time vs Episodes")
+        # Plot the value function of the initial state
+        self.plot(range(1, num_episodes+1), values_of_inital_state, "Episodes", "Values", "Values of Initial State vs Episodes")
+        # Plot the number of stacks per episode
+        self.plot(range(1, num_episodes+1), episode_stacks, "Episodes", "Stacks", "Stacks vs Episodes")
+        # Plot the episode lengths
+        self.plot(range(1, num_episodes+1), episode_lengths, "Episodes", "Episode Length", "Episode Length vs Episodes")
+        
+        self.test_every_visit_monte_carlo(max_episode_length)
+        
 
+    def eplisonGreedyAction(self, state, epsilon):
+        """ Choose an action based on epsilon greedy policy """
+        possible_actions = [action for action in self.actions if self.Transition(state, action) is not None]
 
+        best_action = max([(self.qValue(state, action, self.Transition(state, action)), action) for action in possible_actions], key=lambda x: x[0])[1] # Choose action with highest qValue
+        suboptimal_actions = [action for action in possible_actions if action != best_action]
 
-    def getPossibleActions(self, state):
-        """ Get the possible actions from a state """
-        return [action for action in self.actions if self.Transition(state, action) is not None]
+        possible_actions = [best_action] + suboptimal_actions # Put best action first
+        action_probabilities = [1 - epsilon + epsilon / len(possible_actions)] + [epsilon / len(possible_actions)] * (len(possible_actions) - 1) # Calculate ordered action probabilities
+        return random.choices(possible_actions, action_probabilities, k=1)[0] # Choose action with epsilon greedy policy
     
-    def testQ(self, state, action):
-        """ Calculate the Q-value of a given state and action given the value of the immediate next states """
-        value = 0
-        for state, probability in self.Transition(state, action):
-            value += probability * self.V[state]
-        return value
-    
+    def test_every_visit_monte_carlo(self, max_episode_length, load_value_function = False):
+        """ Test the every visit Monte Carlo algorithm """
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        output_file_path = os.path.join(cwd, 'paths\\agent_path.txt')
+        if load_value_function:
+            func_file_path = os.path.join(cwd, 'valueFunctions\\selfV.npy')
+            self.V = np.load(func_file_path)
+        original_stdout = sys.stdout
+        with open(output_file_path, 'w') as sys.stdout:
+            print("max_episode_length:", max_episode_length)
+            state = (0,0,0,0,0,0,0,0) # Initialize episode
+            action = self.eplisonGreedyAction(state, 0.01) # Choose action with best qValue
+            episode_length = 0
+            self.PrintWarehouse(state, action, episode_length+1)
+            while not self.CheckGoalState(state) and episode_length != max_episode_length: # Generate episode
+                episode_length += 1
+                states, probabilities = zip(*self.Transition(state, action))
+                state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
+                action = self.eplisonGreedyAction(state, 0.01) # Choose action with best qValue
+                self.PrintWarehouse(state, action, episode_length+1)
+                if episode_length == max_episode_length:
+                    print("---- Max episode length reached ----")
+        sys.stdout = original_stdout
+
     def plot(self, x, y, x_label, y_label, title):
         plt.plot(x, y, 'o', label='original data')
 
@@ -411,5 +474,6 @@ class State:
 
 warehouse = State()
 warehouse.EveryVisitMonteCarlo()
+# warehouse.test_every_visit_monte_carlo(500, True)
 # print()
 # test()
