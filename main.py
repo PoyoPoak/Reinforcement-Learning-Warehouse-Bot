@@ -12,7 +12,7 @@ class State:
         self.actions = [('move', dir) for dir in POSSIBLE_DIRS] + [('stack', i) for i in range(5)] + [('setdown', None), ('pickup', None)]
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
         self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
-        self.gamma = 0.99
+        self.gamma = 0.9
         self.policy = {}
         self.states = []
         self.CalculateAllStates()
@@ -44,11 +44,6 @@ class State:
                                         self.states.append((x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x,y)) + 1))
                                  
                                         
-    def fastIndex(self, state):
-        """ Get the index of the provided state in self.states """
-        absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
-        return absIndex - self.totalSkipped[absIndex]
-              
     def fastIndex(self, state):
         """ Get the index of the provided state in self.states """
         absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
@@ -99,18 +94,21 @@ class State:
         print("BoxID in current location: ", state[7])
         
         
-    def PrintWarehouse(self, state):
+    def PrintWarehouse(self, state, action=None, action_num=None):
         """ Print the warehouse with the agent and goal location marked with 'A' and 'G' respectively """        
         for i in range(WAREHOUSE_SIZE):
             for j in range(WAREHOUSE_SIZE):
                 if (i,j) == (state[0], state[1]):
                     print("A", end = " ")
+                elif (i,j) in self.box_initial_locations:
+                    print(f"B", end = " ")
                 elif (i,j) == self.goal_location:
                     print("G", end = " ")
                 else:
                     print(".", end = " ")
             print()
-        print()
+        print("- B1:", state[2], "- B2:", state[3], "- B3:", state[4], "- B4:", state[5], "- B5:", state[6], "action:", action, action_num)
+        print("reward:", self.Reward(state, action), "\n")
     
     
     def Transition(self, state, action):
@@ -218,14 +216,6 @@ class State:
         else:
             raise Exception("Invalid action")
 
-        # Test prints
-        # self.PrintState(state)
-        # self.PrintWarehouse(state)
-        # print("--------------------------------------")
-        # for s in state_list:
-        #     self.PrintState(s[0])
-        #     self.PrintWarehouse(s[0])
-
         return state_list
 
     def Reward(self, state, action):
@@ -251,11 +241,8 @@ class State:
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
                 return 5 
 
-        elif (state[0], state[1]) == self.goal_location: # also based on action?
-            return 2
-
         elif action[0] == 'move':
-            return -1
+            return -0.05
             
         elif action[0] == 'pickup':
             return 5 
@@ -353,7 +340,7 @@ class State:
         """ Get the possible actions from a state """
         return [action for action in self.actions if self.Transition(state, action) is not None]
 
-    def QLearning(self, num_episodes, alpha, epsilon, max_episode_length = 1000):
+    def QLearning(self, num_episodes, alpha, epsilon, max_episode_length = 1000, file_name = None):
         self.Q = np.zeros((len(self.states),len(self.actions)),dtype=np.float16)
 
         self.P = np.zeros(len(self.states),dtype=object)
@@ -409,6 +396,9 @@ class State:
 
         print(f"Total runtime: {sum(runtimes)}      Average runtime per episode: {sum(runtimes)/len(runtimes)}")
 
+        if file_name:
+            np.save(file_name,self.Q)
+
         # make a learning curve (plot of rewards?)
         plt.figure()
         plt.xlabel("Episode")
@@ -417,9 +407,40 @@ class State:
         plt.bar(np.arange(len(rewards)),rewards)
         plt.show()
 
-        # TODO: make a sample trajectory after finishing q learning training                
+        # make a sample trajectory after finishing q learning training  
+        self.test_QLearning(0, max_episode_length)
+
+
+    def test_QLearning(self, epsilon, max_episode_length = 100):
+        state = (0,0,0,0,0,0,0,0)
+        episode_length = 0
+
+        while not self.CheckGoalState(state) and episode_length < max_episode_length:
+            state_idx = self.fastIndex(state)
+            possible_actions = np.array([*map(self.actions.index,self.getPossibleActions(state))],dtype=np.int32)
+            best_action = possible_actions[np.argmax(self.Q[state_idx,possible_actions])]
+
+            action_idx = random.choices(possible_actions, k=1, weights = np.where(possible_actions == best_action, 1 - epsilon + epsilon/len(possible_actions), epsilon/len(possible_actions)))[0]
+            action = self.actions[action_idx]
+
+            self.PrintWarehouse(state, action, episode_length + 1)
+
+            states, probabilities = zip(*self.Transition(state, action))
+
+            successor_state = random.choices(states, k=1, weights=probabilities)[0]
+            state=successor_state
+            episode_length += 1
+        
+        
+            
 
 warehouse = State()
 # warehouse.ValueIteration()
-warehouse.QLearning(100, 0.05, 0.4)
-print()
+
+episodes = 200000
+# episodes = 1000
+warehouse.QLearning(episodes, alpha=0.2, epsilon=0.4, file_name=f"QLearning_{episodes}_episodes.npy")
+
+
+# warehouse.Q = np.load("QLearning_2000_episodes.npy")
+# warehouse.test_QLearning(0, 1000)
