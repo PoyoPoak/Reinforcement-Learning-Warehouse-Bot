@@ -430,6 +430,9 @@ class State:
             successor_state = random.choices(states, k=1, weights=probabilities)[0]
             state=successor_state
             episode_length += 1
+            
+        if self.CheckGoalState(state):
+            self.PrintWarehouse(state, ('end', None), episode_length + 1)
         
         
             
@@ -437,10 +440,9 @@ class State:
 warehouse = State()
 # warehouse.ValueIteration()
 
-episodes = 200000
-# episodes = 1000
+episodes = 2000
 warehouse.QLearning(episodes, alpha=0.2, epsilon=0.4, file_name=f"QLearning_{episodes}_episodes.npy")
 
 
-# warehouse.Q = np.load("QLearning_2000_episodes.npy")
+# warehouse.Q = np.load("QLearning_200000_episodes.npy")
 # warehouse.test_QLearning(0, 1000)
