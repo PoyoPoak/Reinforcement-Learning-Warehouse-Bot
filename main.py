@@ -12,7 +12,7 @@ class State:
         self.actions = [('move', dir) for dir in POSSIBLE_DIRS] + [('stack', i) for i in range(5)] + [('setdown', None), ('pickup', None)]
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
         self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
-        self.gamma = 0.9
+        self.gamma = 1
         self.policy = {}
         self.states = []
         self.CalculateAllStates()
