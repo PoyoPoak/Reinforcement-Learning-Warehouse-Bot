@@ -379,11 +379,90 @@ class State:
         print(f"Policy saved to {filename}")
 
 
-def ValueIterationWrapper(state):
-    state.ValueIteration()
-    warehouse.VI_plot()
-    warehouse.save_policy_to_csv('vi_policy.csv')
+class VIStateSimulation(State):
+    def __init__(self, policy_file):
+        super().__init__()
+        self.load_policy(policy_file)
+        
+    def load_policy(self, policy_file):
+        """ Load policy from a CSV file """
+        policy_df = pd.read_csv(policy_file)
+        
+        self.policy_dict = {}
+        
+        for _, row in policy_df.iterrows():
+            state_tuple = eval(row['State'])
+            action_index = row['Action']
+            self.policy_dict[state_tuple] = self.actions[action_index]
+
+    def PrintWarehouse(self, state, action=None, action_num=None):
+        for i in range(WAREHOUSE_SIZE):
+            for j in range(WAREHOUSE_SIZE):
+                if (i, j) == (state[0], state[1]):
+                    print("A", end=" ")
+                elif (i, j) in self.box_initial_locations:
+                    print(f"B", end=" ")
+                elif (i, j) == self.goal_location:
+                    print("G", end=" ")
+                else:
+                    print(".", end=" ")
+            print()
+            
+        print("- B1:", state[2], "- B2:", state[3], "- B3:", state[4], "- B4:", state[5], "- B5:", state[6], "action:", action, action_num)
+        print("reward:", self.Reward(state, action), "\n")
+
+    def simulate(self, start_state, steps=500):
+        output_file='simulation_output.txt'
+        state = start_state
+        
+        with open(output_file, 'w') as f:
+            for step in range(steps):
+                if self.CheckGoalState(state):
+                    print("Goal state reached!")
+                    break
+                
+                action = self.policy_dict.get(state)
+                
+                if not action:
+                    print("No action found for state:", state)
+                    break
+                
+                action_num = self.actions.index(action)
+                self.PrintWarehouse(state, action, action_num)
+                f.write(self.PrintSimulatedState(state, action, action_num))
+                next_states = self.Transition(state, action)
+                
+                if next_states:
+                    state = max(next_states, key=lambda x: x[1])[0]
+                else:
+                    print("No valid transitions from state:", state)
+                    break
+
+    def PrintSimulatedState(self, state, action, action_num):
+        output = ""
+        
+        for i in range(WAREHOUSE_SIZE):
+            for j in range(WAREHOUSE_SIZE):
+                if (i, j) == (state[0], state[1]):
+                    output += "A "
+                elif (i, j) in self.box_initial_locations:
+                    output += "B "
+                elif (i, j) == self.goal_location:
+                    output += "G "
+                else:
+                    output += ". "
+                    
+            output += "\n"
+            
+        output += f"- B1: {state[2]} - B2: {state[3]} - B3: {state[4]} - B4: {state[5]} - B5: {state[6]} action: {action} {action_num}\n"
+        output += f"reward: {self.Reward(state, action)}\n\n"
+        
+        return output
+
 
 if __name__ == "__main__":
-    warehouse = State()
-    ValueIterationWrapper(warehouse)
+    policy_file = './vi_policy.csv'
+    start_state = (0, 0, 0, 0, 0, 0, 0, 0)
+    
+    warehouse_simulation = VIStateSimulation(policy_file)
+    warehouse_simulation.simulate(start_state)
