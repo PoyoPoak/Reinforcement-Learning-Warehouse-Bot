@@ -12,7 +12,7 @@ class State:
         self.actions = [('move', dir) for dir in POSSIBLE_DIRS] + [('stack', i) for i in range(5)] + [('setdown', None), ('pickup', None)]
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
         self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
-        self.gamma = 1
+        self.gamma = 0.9
         self.policy = {}
         self.states = []
         self.CalculateAllStates()
@@ -235,7 +235,7 @@ class State:
             if self.CheckStackOrder(state, int(action[1])):
                 return 10
             else:
-                return -10 * state[2:7].count(2)
+                return -50
         
         elif action[0] == 'setdown':
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
@@ -245,7 +245,7 @@ class State:
             return -0.05
             
         elif action[0] == 'pickup':
-            return 5 
+            return 5 * state[7]
         
         else:
             raise Exception("Invalid action")
@@ -404,7 +404,12 @@ class State:
         plt.xlabel("Episode")
         plt.ylabel("Reward")
         plt.title("Q-learning Learning curve")
-        plt.bar(np.arange(len(rewards)),rewards)
+        plt.plot(np.arange(len(rewards)),rewards)
+
+        window_width = num_episodes//20
+        running_sum = np.cumsum(np.pad(rewards,window_width//2,mode='edge'))
+        moving_averages = (running_sum[window_width:] - running_sum[:-window_width]) / window_width
+        plt.plot(np.arange(len(rewards)),moving_averages, color="red")
         plt.show()
 
         # make a sample trajectory after finishing q learning training  
@@ -415,6 +420,7 @@ class State:
         state = (0,0,0,0,0,0,0,0)
         episode_length = 0
 
+        accumulated_reward = 0
         while not self.CheckGoalState(state) and episode_length < max_episode_length:
             state_idx = self.fastIndex(state)
             possible_actions = np.array([*map(self.actions.index,self.getPossibleActions(state))],dtype=np.int32)
@@ -422,6 +428,9 @@ class State:
 
             action_idx = random.choices(possible_actions, k=1, weights = np.where(possible_actions == best_action, 1 - epsilon + epsilon/len(possible_actions), epsilon/len(possible_actions)))[0]
             action = self.actions[action_idx]
+
+            reward = self.Reward(state, action)
+            accumulated_reward += reward
 
             self.PrintWarehouse(state, action, episode_length + 1)
 
@@ -432,7 +441,10 @@ class State:
             episode_length += 1
             
         if self.CheckGoalState(state):
+            accumulated_reward += self.Reward(state, ('end', None))
             self.PrintWarehouse(state, ('end', None), episode_length + 1)
+
+        print(f"Total reward earned over episode: {accumulated_reward}")
         
         
             
@@ -440,7 +452,7 @@ class State:
 warehouse = State()
 # warehouse.ValueIteration()
 
-episodes = 2000
+episodes = 5000
 warehouse.QLearning(episodes, alpha=0.2, epsilon=0.4, file_name=f"QLearning_{episodes}_episodes.npy")
 
 
