@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import sys
 import os
+import pickle
 # Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
 # Box Status: 0: In starting space, 1: Sitting in the goal space, 2: Stacked in the goal, 3: currently being carried
 
@@ -189,9 +190,12 @@ class State:
                 state_list.append((update_box_id(new_state), 0.9))   
            
         elif action[0] == "stack":
+            for b in state[2:7]: # can only stack if  all boxes are in goal
+                if b != 2 and b != 1:
+                    return None
             if (state[0], state[1]) != self.goal_location:
                 return None
-            elif state[int(action[1])+2] == 1 and 3 not in state[2:7]: # only let try stack if box is on floor and not carrying a box
+            elif state[int(action[1])+2] == 1: # only let try stack if box is on floor and not carrying a box
                 new_state = list(state)
                 if self.CheckStackOrder(state, int(action[1])): # stack if correct order
                     new_state[int(action[1])+2] = 2
@@ -216,7 +220,6 @@ class State:
             # no box initially starts here, the box that's supposed to be here has been picked up, or we are already carrying a box# double check
             if state[7] == 0 or state[state[7]+1] != 0 or 3 in state[2:7]: # note: state[7] starts at 1 so only add 1 to get box index as state idx starts at 0
                 return None
-            
             new_state = list(state)
             new_state[state[7]+1] = 3
             state_list.append((tuple(new_state), 1))
@@ -252,7 +255,7 @@ class State:
                 list_state[int(action[1])+2] = 2
                 new_state = tuple(list_state)
                 if self.CheckGoalState(new_state):
-                    return 10000
+                    return 100
                 else:
                     return 10
             else:
@@ -265,10 +268,17 @@ class State:
         # elif (state[0], state[1]) == self.goal_location: # also based on action?
         #     return 2
 
+        # elif action[0] == 'move' and self.headedTowardPosition(state, action, self.goal_location) and 3 in state[2:7]:
+        #     return 0.5
+        
+        # elif action[0] == 'move' and 3 not in state[2:7] and (self.headedTowardPosition(state, action, self.box_initial_locations[0]) or self.headedTowardPosition(state, action, self.box_initial_locations[1]) or self.headedTowardPosition(state, action, self.box_initial_locations[2]) or self.headedTowardPosition(state, action, self.box_initial_locations[3]) or self.headedTowardPosition(state, action, self.box_initial_locations[4])):
+        #     return 0.5
+
         elif action[0] == 'move':
             return -1
             
         elif action[0] == 'pickup': # and state[7] == 1:
+            # print("pickup reward", state, action)
             return 5 
         # elif action[0] == 'pickup' and state[7] == 2:
         #     return 20
@@ -281,6 +291,26 @@ class State:
         
         else:
             raise Exception("Invalid action")
+            
+    # def headedTowardPosition(self, state, action, position):
+    #     def getMov(dir):
+    #                 xdir = [0, 1, 0, -1][dir]
+    #                 ydir = [-1, 0, 1, 0][dir]
+    #                 return (xdir,ydir)
+    #     x = state[0]
+    #     y = state[1]
+    #     x2 = position[0]
+    #     y2 = position[1]
+    #     xmov, ymov = getMov(POSSIBLE_DIRS.index(action[1]))
+    #     if x > x2 and xmov > 0:
+    #         return False
+    #     if x < x2 and xmov < 0:
+    #         return False
+    #     if y > y2 and ymov > 0:
+    #         return False
+    #     if y < y2 and ymov < 0:
+    #         return False
+    #     return True
                 
     def ValueIteration(self):
         """ Runs value iteration """
@@ -368,78 +398,89 @@ class State:
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
         
-    def EveryVisitMonteCarlo(self, num_episodes = 8000, max_episode_length = 50, epsilon = 0.5, gamma = 0.99):
+    def EveryVisitMonteCarlo(self, num_episodes = 100000, max_episode_length = 400, epsilon = 0.1, gamma = 0.9):
         # oringinal_max_episode_length = max_episode_length
         print("Number of episodes:", num_episodes, "Max episode length:", max_episode_length, "Epsilon:", epsilon, "Gamma:", gamma)
         """ Runs the every visit Monte Carlo algorithm """
         cwd = os.path.dirname(os.path.abspath(__file__))
-        func_file_path = os.path.join(cwd, 'valueFunctions\\selfQ.npy')
-        # self.Q = np.zeros(len(self.states) * len(self.actions),dtype=np.float16)
+        func_file_path = os.path.join(cwd, 'valueFunctions\\policy.pkl')
+        self.policy = {}
         self.Q = np.random.rand(len(self.states) * len(self.actions)).astype(np.float16)
-        # for q in range(len(self.Q)):
-        #     self.Q[q] = random.uniform(-200, -100)
         state_action_combinations = [(state, action) for state in self.states for action in self.actions]
         self.Q_to_idx = {state_action: idx for idx, state_action in enumerate(state_action_combinations)}
+        self.update_policy(self.states, epsilon)
         episode_times = []
         episode_stacks = []
         box_stacked = [0,0,0,0,0]
         episode_lengths = []
         total_rewards = []
+        setdowns = 0
+        pickups = 0
         for i in tqdm(range(num_episodes)):
             episode_start_time = time.time()
             episode_stacks.append(0)
             episode = []
             total_reward = 0
             state = (0,0,0,0,0,0,0,0) # Initialize episode
-            action = self.eplisonGreedyAction(state, epsilon)
+            action = self.policy[state]
             reward = self.Reward(state, action)
             episode.append((state, action, reward))
             episode_length = 0
             while not self.CheckGoalState(state) and episode_length != max_episode_length: # Generate episode
                 episode_length += 1
-                states, probabilities = zip(*self.Transition(state, action)) # Get possible states and their probabilities
+                states, probabilities = zip(*self.Transition(state, action)) # (state, prob) -> [states], [probs]
                 state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
-                action = self.eplisonGreedyAction(state, epsilon)
+                action = self.policy[state]
                 if action[0] == 'stack':
                     episode_stacks[-1] += 1
                     box_stacked[int(action[1])] += 1
+                if action[0] == 'setdown':
+                    setdowns += 1
+                if action[0] == 'pickup':
+                    pickups += 1
                 reward = self.Reward(state, action)
                 total_reward += reward
                 episode.append((state, action, reward))
             episode_lengths.append(episode_length)
             total_rewards.append(total_reward)
 
-            encountered_state_actions = set()  # Set up new value calc and storage
-            episode_values = {}
+            state_action_rewards_lists = {}
+            encountered_state_actions = set()
+            encountered_states = set()
             cumulative_reward = 0
             # Calculate Q-Values
             for (state, action, reward) in reversed(episode):
                 cumulative_reward = reward + gamma * cumulative_reward
                 if (state, action) not in encountered_state_actions:
-                    episode_values[(state, action)] = np.array([], dtype=np.float16)
-                episode_values[(state, action)] = np.append(episode_values[(state, action)], cumulative_reward)
+                    state_action_rewards_lists[(state, action)] = np.array([], dtype=np.float16)
+                state_action_rewards_lists[(state, action)] = np.append(state_action_rewards_lists[(state, action)], cumulative_reward)
                 encountered_state_actions.add((state, action))
+                encountered_states.add(state)
 
-            for state_action in encountered_state_actions: # Update value function with mean of episode values
-                state_action = (state, action)
-                self.Q[self.Q_to_idx[state_action]] = np.mean(episode_values[state_action])
-
-            np.save(func_file_path, self.Q) # Save value function
+            for state_action in encountered_state_actions:
+                self.Q[self.Q_to_idx[state_action]] = np.mean(state_action_rewards_lists[state_action])
+            
+            self.update_policy(encountered_states, epsilon)
 
             episode_times.append(time.time() - episode_start_time) # Store episode time
         
+        with open(func_file_path, 'wb') as f:
+            pickle.dump(self.policy, f)
+        
+        print("setdowns:", setdowns, "ratio to episodes:", setdowns/num_episodes)
+        print("pickups:", pickups, "ratio to episodes:", pickups/num_episodes)
         print("Average episode time:", np.mean(episode_times), "seconds, Std:", np.std(episode_times), ", Total time:", np.sum(episode_times)/60, "minutes")
-        self.plot(range(1, num_episodes+1), episode_times, "Episodes", "Time (s)", "Episode Time vs Episodes")
+        # self.plot(range(1, num_episodes+1), episode_times, "Episodes", "Time (s)", "Episode Time vs Episodes")
         # Plot the total rewards per episode
         self.plot(range(1, num_episodes+1), total_rewards, "Episodes", "Total Reward", "Total Reward vs Episodes")
         # Plot the number of stacks per episode
         self.plot(range(1, num_episodes+1), episode_stacks, "Episodes", "Stacks", "Stacks vs Episodes")
-        # Plot the number of stacks per episode (stacks <= 5)
-        stacks_less_or_equal_5 = [s for s in episode_stacks if s <= 5]
-        stacks_less_or_equal_5_not_0 = [s for s in episode_stacks if s <= 5]
-        print("Number of stacks <= 5 and != 0:", len(stacks_less_or_equal_5_not_0))
+        # Plot the number of stacks per episode (stacks <= 1)
+        # stacks_less_or_equal_1 = [s for s in episode_stacks if s <= 1]
+        stacks_less_or_equal_1_not_0 = [s for s in episode_stacks if s <= 1 and s != 0]
+        print("Number of stacks <= 1 and != 0:", len(stacks_less_or_equal_1_not_0))
         print("How many times each box was stacked? B1:", box_stacked[0], "B2:", box_stacked[1], "B3:", box_stacked[2], "B4:", box_stacked[3], "B5:", box_stacked[4], "Total:", sum(box_stacked), "ratio to episodes:", sum(box_stacked)/num_episodes)
-        self.plot(range(1, len(stacks_less_or_equal_5)+1), stacks_less_or_equal_5, "Episodes", "Stacks", "Stacks vs Episodes (Stacks <= 5)")
+        # self.plot(range(1, len(stacks_less_or_equal_1)+1), stacks_less_or_equal_1, "Episodes", "Stacks", "Stacks vs Episodes (Stacks <= 1)")
         # Plot the episode lengths
         lengths_not_max = [l for l in episode_lengths if l != max_episode_length]
         print("Number of episodes not reaching max length:", len(lengths_not_max))
@@ -448,38 +489,40 @@ class State:
         self.test_every_visit_monte_carlo(max_episode_length)
         
 
-    def eplisonGreedyAction(self, state, epsilon):
-        """ Choose an action based on epsilon greedy policy """
-        possible_actions = [action for action in self.actions if self.Transition(state, action) is not None]
+    def update_policy(self, states, epsilon):
+        """ Update policy based on epsilon greedy Q-values """
+        for state in states:
+            possible_actions = [action for action in self.actions if self.Transition(state, action) is not None]
 
-        best_action = max([(self.Q[self.Q_to_idx[(state, action)]], action) for action in possible_actions])[1]
-        suboptimal_actions = [action for action in possible_actions if action != best_action]
+            best_action = max([(self.Q[self.Q_to_idx[(state, action)]], action) for action in possible_actions])[1] # Best Q-val for list (Q-val, action)
+            suboptimal_actions = [action for action in possible_actions if action != best_action]
 
-        possible_actions = [best_action] + suboptimal_actions # Put best action first
-        action_probabilities = [1 - epsilon + epsilon / len(possible_actions)] + [epsilon / len(possible_actions)] * (len(possible_actions) - 1) # Calculate ordered action probabilities
-        return random.choices(possible_actions, action_probabilities, k=1)[0] # Choose action with epsilon greedy policy
+            possible_actions = [best_action] + suboptimal_actions # Put best action first
+            action_probabilities = [1 - epsilon + epsilon / len(possible_actions)] + [epsilon / len(possible_actions)] * (len(possible_actions) - 1) # Prob for each action, best first
+            self.policy[state] = random.choices(possible_actions, action_probabilities, k=1)[0] # Choose action with epsilon greedy policy
     
     def test_every_visit_monte_carlo(self, max_episode_length, load_value_function = False):
         """ Test the every visit Monte Carlo algorithm """
         cwd = os.path.dirname(os.path.abspath(__file__))
         output_file_path = os.path.join(cwd, 'paths\\agent_path.txt')
         if load_value_function:
-            func_file_path = os.path.join(cwd, 'valueFunctions\\selfQ.npy')
-            self.Q = np.load(func_file_path)
+            func_file_path = os.path.join(cwd, 'valueFunctions\\policy.pkl')
+            with open(func_file_path, 'rb') as f:
+                self.policy = pickle.load(f)
         original_max_episode_length = max_episode_length
         max_episode_length *= 2
         original_stdout = sys.stdout
         with open(output_file_path, 'w') as sys.stdout:
             print("max_episode_length:", max_episode_length)
             state = (0,0,0,0,0,0,0,0) # Initialize episode
-            action = self.eplisonGreedyAction(state, 0) # Choose action with best qValue
+            action = self.policy[state]
             episode_length = 0
             self.PrintWarehouse(state, action, episode_length+1)
             while not self.CheckGoalState(state) and episode_length != max_episode_length: # Generate episode
                 episode_length += 1
                 states, probabilities = zip(*self.Transition(state, action))
                 state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
-                action = self.eplisonGreedyAction(state, 0) # Choose action with best qValue
+                action = self.policy[state]
                 self.PrintWarehouse(state, action, episode_length+1)
                 if episode_length == original_max_episode_length:
                     print("---- Training Max episode length reached ----")
