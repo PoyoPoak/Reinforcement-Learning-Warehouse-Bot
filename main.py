@@ -190,12 +190,9 @@ class State:
                 state_list.append((update_box_id(new_state), 0.9))   
            
         elif action[0] == "stack":
-            for b in state[2:7]: # can only stack if  all boxes are in goal
-                if b != 2 and b != 1:
-                    return None
             if (state[0], state[1]) != self.goal_location:
                 return None
-            elif state[int(action[1])+2] == 1: # only let try stack if box is on floor and not carrying a box
+            elif state[int(action[1])+2] == 1 and 3 not in state[2:7]: # only let try stack if box is on floor and not carrying a box
                 new_state = list(state)
                 if self.CheckStackOrder(state, int(action[1])): # stack if correct order
                     new_state[int(action[1])+2] = 2
@@ -220,6 +217,7 @@ class State:
             # no box initially starts here, the box that's supposed to be here has been picked up, or we are already carrying a box# double check
             if state[7] == 0 or state[state[7]+1] != 0 or 3 in state[2:7]: # note: state[7] starts at 1 so only add 1 to get box index as state idx starts at 0
                 return None
+            
             new_state = list(state)
             new_state[state[7]+1] = 3
             state_list.append((tuple(new_state), 1))
@@ -227,15 +225,6 @@ class State:
         else:
             raise Exception("Invalid action")
 
-        # Test prints
-        # self.PrintState(state)
-        # self.PrintWarehouse(state)
-        # print("--------------------------------------")
-        # for s in state_list:
-        #     self.PrintState(s[0])
-        #     self.PrintWarehouse(s[0])
-
-        __cache[(state, action)] = state_list
         return state_list
 
     def Reward(self, state, action):
@@ -248,69 +237,27 @@ class State:
         Returns:
             float: Reward for the given state and action
         """
+        if action[0] == 'end':
+            return 100
 
-        if action[0] == 'stack':
+        elif action[0] == 'stack':
             if self.CheckStackOrder(state, int(action[1])):
-                list_state = list(state)
-                list_state[int(action[1])+2] = 2
-                new_state = tuple(list_state)
-                if self.CheckGoalState(new_state):
-                    return 100
-                else:
-                    return 10
+                return 10
             else:
                 return -50 
         
         elif action[0] == 'setdown':
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
-                return 100 
-
-        # elif (state[0], state[1]) == self.goal_location: # also based on action?
-        #     return 2
-
-        # elif action[0] == 'move' and self.headedTowardPosition(state, action, self.goal_location) and 3 in state[2:7]:
-        #     return 0.5
-        
-        # elif action[0] == 'move' and 3 not in state[2:7] and (self.headedTowardPosition(state, action, self.box_initial_locations[0]) or self.headedTowardPosition(state, action, self.box_initial_locations[1]) or self.headedTowardPosition(state, action, self.box_initial_locations[2]) or self.headedTowardPosition(state, action, self.box_initial_locations[3]) or self.headedTowardPosition(state, action, self.box_initial_locations[4])):
-        #     return 0.5
+                return 5 
 
         elif action[0] == 'move':
-            return -1
+            return -0.05
             
-        elif action[0] == 'pickup': # and state[7] == 1:
-            # print("pickup reward", state, action)
+        elif action[0] == 'pickup':
             return 5 
-        # elif action[0] == 'pickup' and state[7] == 2:
-        #     return 20
-        # elif action[0] == 'pickup' and state[7] == 3:
-        #     return 30
-        # elif action[0] == 'pickup' and state[7] == 4:
-        #     return 40
-        # elif action[0] == 'pickup' and state[7] == 5:
-        #     return 50
         
         else:
             raise Exception("Invalid action")
-            
-    # def headedTowardPosition(self, state, action, position):
-    #     def getMov(dir):
-    #                 xdir = [0, 1, 0, -1][dir]
-    #                 ydir = [-1, 0, 1, 0][dir]
-    #                 return (xdir,ydir)
-    #     x = state[0]
-    #     y = state[1]
-    #     x2 = position[0]
-    #     y2 = position[1]
-    #     xmov, ymov = getMov(POSSIBLE_DIRS.index(action[1]))
-    #     if x > x2 and xmov > 0:
-    #         return False
-    #     if x < x2 and xmov < 0:
-    #         return False
-    #     if y > y2 and ymov > 0:
-    #         return False
-    #     if y < y2 and ymov < 0:
-    #         return False
-    #     return True
                 
     def ValueIteration(self):
         """ Runs value iteration """
@@ -398,8 +345,7 @@ class State:
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
         
-    def EveryVisitMonteCarlo(self, num_episodes = 100000, max_episode_length = 400, epsilon = 0.1, gamma = 0.9):
-        # oringinal_max_episode_length = max_episode_length
+    def EveryVisitMonteCarlo(self, num_episodes = 100000, max_episode_length = 300, epsilon = 0.2, gamma = 0.9):
         print("Number of episodes:", num_episodes, "Max episode length:", max_episode_length, "Epsilon:", epsilon, "Gamma:", gamma)
         """ Runs the every visit Monte Carlo algorithm """
         cwd = os.path.dirname(os.path.abspath(__file__))
@@ -407,42 +353,40 @@ class State:
         self.policy = {}
         self.Q = np.random.rand(len(self.states) * len(self.actions)).astype(np.float16)
         state_action_combinations = [(state, action) for state in self.states for action in self.actions]
-        self.Q_to_idx = {state_action: idx for idx, state_action in enumerate(state_action_combinations)}
+        self.Q_to_idx = {state_action: idx for idx, state_action in enumerate(state_action_combinations)} # Map state-action pairs to Q-value index
         self.update_policy(self.states, epsilon)
-        episode_times = []
+
+        episode_times = [] # Data to store
         episode_stacks = []
-        box_stacked = [0,0,0,0,0]
         episode_lengths = []
-        total_rewards = []
+        accumulated_rewards = []
         setdowns = 0
         pickups = 0
         for i in tqdm(range(num_episodes)):
             episode_start_time = time.time()
             episode_stacks.append(0)
-            episode = []
-            total_reward = 0
-            state = (0,0,0,0,0,0,0,0) # Initialize episode
-            action = self.policy[state]
-            reward = self.Reward(state, action)
-            episode.append((state, action, reward))
+            accumulated_reward = 0
+
             episode_length = 0
+            episode = [] # Initialize episode
+            state = (0,0,0,0,0,0,0,0)
             while not self.CheckGoalState(state) and episode_length != max_episode_length: # Generate episode
-                episode_length += 1
+                action = self.policy[state]
+                reward = self.Reward(state, action)
+                episode.append((state, action, reward))
                 states, probabilities = zip(*self.Transition(state, action)) # (state, prob) -> [states], [probs]
                 state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
-                action = self.policy[state]
+
+                episode_length += 1
+                accumulated_reward += reward # Collect information
                 if action[0] == 'stack':
                     episode_stacks[-1] += 1
-                    box_stacked[int(action[1])] += 1
                 if action[0] == 'setdown':
                     setdowns += 1
                 if action[0] == 'pickup':
                     pickups += 1
-                reward = self.Reward(state, action)
-                total_reward += reward
-                episode.append((state, action, reward))
             episode_lengths.append(episode_length)
-            total_rewards.append(total_reward)
+            accumulated_rewards.append(accumulated_reward)
 
             state_action_rewards_lists = {}
             encountered_state_actions = set()
@@ -451,16 +395,23 @@ class State:
             # Calculate Q-Values
             for (state, action, reward) in reversed(episode):
                 cumulative_reward = reward + gamma * cumulative_reward
-                if (state, action) not in encountered_state_actions:
-                    state_action_rewards_lists[(state, action)] = np.array([], dtype=np.float16)
-                state_action_rewards_lists[(state, action)] = np.append(state_action_rewards_lists[(state, action)], cumulative_reward)
-                encountered_state_actions.add((state, action))
-                encountered_states.add(state)
 
-            for state_action in encountered_state_actions:
+                if (state, action) not in encountered_state_actions: # Create list of each state-action encounter in episode
+                    state_action_rewards_lists[(state, action)] = np.array([], dtype=np.float16) # Initialize list
+                state_action_rewards_lists[(state, action)] = np.append(state_action_rewards_lists[(state, action)], cumulative_reward) # Append reward to list
+
+                encountered_state_actions.add((state, action)) # Add state-action to encountered for averaging
+                encountered_states.add(state) # Add state to encountered for policy update
+                
+            # self.print_policy(f"policy{i}.txt", episode)
+
+            for state_action in encountered_state_actions: # Update Q-values
                 self.Q[self.Q_to_idx[state_action]] = np.mean(state_action_rewards_lists[state_action])
             
             self.update_policy(encountered_states, epsilon)
+            
+            # if epsilon > 0.05:
+            #     epsilon = epsilon * 0.9999
 
             episode_times.append(time.time() - episode_start_time) # Store episode time
         
@@ -472,19 +423,18 @@ class State:
         print("Average episode time:", np.mean(episode_times), "seconds, Std:", np.std(episode_times), ", Total time:", np.sum(episode_times)/60, "minutes")
         # self.plot(range(1, num_episodes+1), episode_times, "Episodes", "Time (s)", "Episode Time vs Episodes")
         # Plot the total rewards per episode
-        self.plot(range(1, num_episodes+1), total_rewards, "Episodes", "Total Reward", "Total Reward vs Episodes")
+        self.plot(range(1, num_episodes+1), accumulated_rewards, "Episodes", "Accumulated Reward", "Accumulated Reward vs Episodes")
         # Plot the number of stacks per episode
         self.plot(range(1, num_episodes+1), episode_stacks, "Episodes", "Stacks", "Stacks vs Episodes")
         # Plot the number of stacks per episode (stacks <= 1)
         # stacks_less_or_equal_1 = [s for s in episode_stacks if s <= 1]
         stacks_less_or_equal_1_not_0 = [s for s in episode_stacks if s <= 1 and s != 0]
         print("Number of stacks <= 1 and != 0:", len(stacks_less_or_equal_1_not_0))
-        print("How many times each box was stacked? B1:", box_stacked[0], "B2:", box_stacked[1], "B3:", box_stacked[2], "B4:", box_stacked[3], "B5:", box_stacked[4], "Total:", sum(box_stacked), "ratio to episodes:", sum(box_stacked)/num_episodes)
         # self.plot(range(1, len(stacks_less_or_equal_1)+1), stacks_less_or_equal_1, "Episodes", "Stacks", "Stacks vs Episodes (Stacks <= 1)")
         # Plot the episode lengths
-        lengths_not_max = [l for l in episode_lengths if l != max_episode_length]
-        print("Number of episodes not reaching max length:", len(lengths_not_max))
-        self.plot(range(1, num_episodes+1), episode_lengths, "Episodes", "Episode Length", "Episode Length vs Episodes")
+        # lengths_not_max = [l for l in episode_lengths if l != max_episode_length]
+        # print("Number of episodes not reaching max length:", len(lengths_not_max))
+        # self.plot(range(1, num_episodes+1), episode_lengths, "Episodes", "Episode Length", "Episode Length vs Episodes")
         
         self.test_every_visit_monte_carlo(max_episode_length)
         
@@ -515,23 +465,22 @@ class State:
         with open(output_file_path, 'w') as sys.stdout:
             print("max_episode_length:", max_episode_length)
             state = (0,0,0,0,0,0,0,0) # Initialize episode
-            action = self.policy[state]
             episode_length = 0
-            self.PrintWarehouse(state, action, episode_length+1)
             while not self.CheckGoalState(state) and episode_length != max_episode_length: # Generate episode
                 episode_length += 1
-                states, probabilities = zip(*self.Transition(state, action))
-                state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
                 action = self.policy[state]
                 self.PrintWarehouse(state, action, episode_length+1)
                 if episode_length == original_max_episode_length:
                     print("---- Training Max episode length reached ----")
                 if episode_length == max_episode_length:
                     print("---- Max episode length reached ----")
+                states, probabilities = zip(*self.Transition(state, action))
+                state = random.choices(states, probabilities, k=1)[0] # Randomly choose next state
         sys.stdout = original_stdout
 
     def plot(self, x, y, x_label, y_label, title):
         plt.plot(x, y, 'o', label='original data')
+        # plt.bar(np.arange(len(y)),y, label='original data')
 
         # Calc regression line
         coefficients = np.polyfit(x, y, 1)
@@ -544,6 +493,64 @@ class State:
         plt.title(title)
         plt.legend()
         plt.show()
+
+    def print_policy(self, filename, episode):
+        original_stdout = sys.stdout
+        output_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "warehouse_policies\\" + filename)
+        with open(output_file_path, 'w') as sys.stdout:
+            for y in range(WAREHOUSE_SIZE):
+                for x in range(WAREHOUSE_SIZE):
+                    spacing = "\t\t\t"
+                    if (x,y) in self.box_initial_locations:
+                        box = self.box_initial_locations.index((x, y)) + 1
+                        print(f"B{box}{spacing}", end = "")
+                    elif (x,y) == self.goal_location:
+                        print(f"G{spacing}", end = "")
+                    else:
+                        print(f".{spacing}", end = "")
+                print()
+            print("\n")
+
+            # for y in range(WAREHOUSE_SIZE):
+            #     for x in range(WAREHOUSE_SIZE):
+            #         box_in_loc = self.box_initial_locations.index((x, y)) + 1 if (x, y) in self.box_initial_locations else 0
+            #         actions = [action for action in self.actions if self.Transition((x, y, 0, 0, 0, 0, 0, box_in_loc), action) is not None]
+            #         for action in actions:
+            #             if action == self.policy[(x, y, 0, 0, 0, 0, 0, box_in_loc)]:
+            #                 print("action", end = "-")
+            #             print(f"({x}, {y}) {action} {self.Q[self.Q_to_idx[((x, y, 0, 0, 0, 0, 0, box_in_loc), action)]]:.2f}", end = " ")
+            #         print()
+
+            for (state, agent_action, reward) in episode:
+                # for y in range(WAREHOUSE_SIZE):
+                #     for x in range(WAREHOUSE_SIZE):
+                        # box_in_loc = self.box_initial_locations.index((x, y)) + 1 if (x, y) in self.box_initial_locations else 0
+                actions = [action for action in self.actions if self.Transition(state, action) is not None]
+                space = "\t| "
+                if agent_action[1] == 'up' or agent_action[1] == 'left' or agent_action[1] == 'down':
+                    space = "\t\t| "
+                print(f"({state[0]}, {state[1]}) Agent action: {agent_action} Reward: {reward}", end = space)
+                for action in actions:
+                    print(f"({action} {self.Q[self.Q_to_idx[(state, action)]]:.2f})", end = " ")
+                print()
+            print()
+
+            for (state, agent_action, reward) in episode:
+                for y in range(WAREHOUSE_SIZE):
+                    for x in range(WAREHOUSE_SIZE):
+                        box = self.box_initial_locations.index((x, y)) + 1 if (x, y) in self.box_initial_locations else 0
+                        action = self.policy[(x, y, *state[2:7], box)]
+                        if (x, y) == (state[0], state[1]):
+                            print(f"A\t\t\t", end = "")
+                        elif action[1] == 'up':
+                            print(f"{action[0]} {action[1]}\t\t", end="")
+                        elif action[0] == 'pickup':
+                            print(f"{action[0]} {box}\t", end="")
+                        else:
+                            print(f"{action[0]} {action[1]}\t", end="")
+                    print()
+                print(f"action: {agent_action} reward: {reward} b1: {state[2]} b2: {state[3]} b3: {state[4]} b4: {state[5]} b5: {state[6]}\n")
+        sys.stdout = original_stdout
 
 warehouse = State()
 warehouse.EveryVisitMonteCarlo()

@@ -1,0 +1,156 @@
+.			.			.			.			.			.			.			.			.			.			
+.			.			.			.			.			.			.			.			.			B4			
+.			.			.			.			.			.			.			B5			.			.			
+.			.			.			.			.			.			.			.			.			.			
+.			.			.			.			.			B3			.			.			.			.			
+.			.			.			B1			.			.			.			.			.			.			
+.			.			.			.			.			.			.			.			.			.			
+.			.			.			.			.			.			.			.			.			.			
+.			B2			.			.			.			.			.			.			.			.			
+.			.			.			.			.			.			.			.			.			G			
+
+
+(0, 0) Agent action: ('move', 'right') Reward: -0.05	| (('move', 'down') 0.41) (('move', 'right') 0.92) 
+(1, 0) Agent action: ('move', 'right') Reward: -0.05	| (('move', 'down') 0.41) (('move', 'right') 0.95) (('move', 'up') 0.34) 
+(1, 1) Agent action: ('move', 'up') Reward: -0.05		| (('move', 'left') 0.31) (('move', 'down') 0.73) (('move', 'right') 0.63) (('move', 'up') 0.73) 
+(0, 1) Agent action: ('move', 'down') Reward: -0.05	| (('move', 'left') 0.65) (('move', 'down') 0.89) (('move', 'right') 0.47) 
+(1, 1) Agent action: ('move', 'up') Reward: -0.05		| (('move', 'left') 0.31) (('move', 'down') 0.73) (('move', 'right') 0.63) (('move', 'up') 0.73) 
+(0, 1) Agent action: ('move', 'down') Reward: -0.05	| (('move', 'left') 0.65) (('move', 'down') 0.89) (('move', 'right') 0.47) 
+(0, 0) Agent action: ('move', 'right') Reward: -0.05	| (('move', 'down') 0.41) (('move', 'right') 0.92) 
+(0, 2) Agent action: ('move', 'right') Reward: -0.05	| (('move', 'left') 0.27) (('move', 'down') 0.65) (('move', 'right') 0.70) 
+(0, 3) Agent action: ('move', 'down') Reward: -0.05	| (('move', 'left') 0.02) (('move', 'down') 0.51) (('move', 'right') 0.31) 
+(1, 3) Agent action: ('move', 'down') Reward: -0.05	| (('move', 'left') 0.58) (('move', 'down') 0.59) (('move', 'right') 0.15) (('move', 'up') 0.49) 
+(3, 3) Agent action: ('move', 'up') Reward: -0.05		| (('move', 'left') 0.36) (('move', 'down') 0.47) (('move', 'right') 0.60) (('move', 'up') 0.93) 
+
+A			move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'right') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	A			move down	move down	move down	move right	move down	move up		move up		move up		
+move down	move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'right') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	A			move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'up') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+A			move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'down') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	A			move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'up') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+A			move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'down') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+A			move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'right') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	move up		move left	move right	move down	move right	move left	move left	move down	move left	
+A			move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'right') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+A			move down	move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'down') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	A			move right	move up		move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'down') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
+move right	move right	move down	move down	move down	move right	move down	move up		move up		move up		
+move down	move up		move left	move right	move down	move right	move left	move left	move down	move left	
+move right	move down	move down	move up		move right	move left	move right	move down	move left	move left	
+move down	move down	move right	A			move up		move up		move up		move up		move left	move right	
+move left	move left	move right	move right	move left	move right	move up		move down	move down	move up		
+move right	move up		move up		move left	move down	move up		move up		move up		move left	move right	
+move left	move left	move up		move up		move right	move down	move right	move right	move down	move right	
+move left	move left	move left	move left	move down	move down	move left	move left	move right	move left	
+move right	pickup 2	move left	move right	move up		move left	move down	move left	move right	move up		
+move down	move left	move up		move down	move down	move down	move left	move down	move left	move up		
+action: ('move', 'up') reward: -0.05 b1: 0 b2: 0 b3: 0 b4: 0 b5: 0
+
