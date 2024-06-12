@@ -12,7 +12,6 @@ class State:
         self.actions = [('move', dir) for dir in POSSIBLE_DIRS] + [('stack', i) for i in range(5)] + [('setdown', None), ('pickup', None)]
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
         self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
-        self.gamma = 0.9
         self.policy = {}
         self.states = []
         self.CalculateAllStates()
@@ -250,7 +249,7 @@ class State:
         else:
             raise Exception("Invalid action")
                 
-    def ValueIteration(self):
+    def ValueIteration(self, gamma):
         """ Runs value iteration """
         self.V = np.zeros(len(self.states),dtype=np.float16)
         max_trials = 100
@@ -285,7 +284,7 @@ class State:
                     elif self.P[na,idx] == 0:
                         self.P[na,idx] = self.Transition(s, action)
 
-                    qaction = self.qValue(s, action, self.P[na,idx])
+                    qaction = self.qValue(s, action, self.P[na,idx], gamma)
 
                     if qaction > bestQ[idx]:
                         bestQ[idx] = qaction
@@ -293,7 +292,7 @@ class State:
             
             residual = np.abs(bestQ - self.V)
             self.V = bestQ
-            max_residual = max(max_residual,np.max(residual))
+            max_residual = max(max_residual, np.max(residual))
 
             print('Max Residual:', max_residual, "time:",(time.time() - iter_start) / 60)
 
@@ -306,7 +305,7 @@ class State:
         print('Time taken to solve (minutes): ', (end - start) / 60)
         
     # __cache takes advantage of default paramaters to store a local dict that persists between function calls
-    def qValue(self, s, action, possible_states, __cache = {}): 
+    def qValue(self, s, action, possible_states, gamma, __cache = {}): 
         """ Calculate the Q-value of a given state and action
 
         Args:
@@ -331,7 +330,7 @@ class State:
             
             succ_sum = np.sum(probabilities * self.V[indices])
             
-            return self.Reward(s, action) + self.gamma * succ_sum
+            return self.Reward(s, action) + gamma * succ_sum
         
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
@@ -340,7 +339,7 @@ class State:
         """ Get the possible actions from a state """
         return [action for action in self.actions if self.Transition(state, action) is not None]
 
-    def QLearning(self, num_episodes, alpha, epsilon, max_episode_length = 1000, file_name = None):
+    def QLearning(self, num_episodes, alpha, epsilon, gamma, max_episode_length = 1000, file_name = None):
         self.Q = np.zeros((len(self.states),len(self.actions)),dtype=np.float16)
 
         self.P = np.zeros(len(self.states),dtype=object)
@@ -381,7 +380,7 @@ class State:
                     self.P[successor_state_idx] = np.array([*map(self.actions.index,self.getPossibleActions(successor_state))],dtype=np.int32)
                 possible_successor_actions = self.P[successor_state_idx]
 
-                self.Q[state_idx,action_idx] = self.Q[state_idx,action_idx] + alpha * (reward + self.gamma * np.max(self.Q[successor_state_idx, possible_successor_actions]) - self.Q[state_idx, action_idx])
+                self.Q[state_idx,action_idx] = self.Q[state_idx,action_idx] + alpha * (reward + gamma * np.max(self.Q[successor_state_idx, possible_successor_actions]) - self.Q[state_idx, action_idx])
 
                 state = successor_state
                 episode_length += 1
@@ -450,11 +449,10 @@ class State:
             
 
 warehouse = State()
-# warehouse.ValueIteration()
+
+# warehouse.ValueIteration(gamma=0.9)
 
 episodes = 5000
-warehouse.QLearning(episodes, alpha=0.2, epsilon=0.4, file_name=f"QLearning_{episodes}_episodes.npy")
-
-
+warehouse.QLearning(episodes, alpha=0.2, epsilon=0.4, gamma=0.9, file_name=f"QLearning_{episodes}_episodes.npy")
 # warehouse.Q = np.load("QLearning_200000_episodes.npy")
 # warehouse.test_QLearning(0, 1000)
