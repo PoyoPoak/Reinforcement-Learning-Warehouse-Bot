@@ -687,19 +687,19 @@ class VISim(State):
 
 
     def simulate(self, start_state, steps=500):
-        output_file='simulation_output.txt'
+        output_file = 'simulation_output.txt'
         state = start_state
         
         with open(output_file, 'w') as f:
             for step in range(steps):
                 if self.CheckGoalState(state):
-                    print("Goal state reached!")
+                    f.write("Goal state reached!\n")
                     break
                 
                 action = self.policy_dict.get(state)
                 
                 if not action:
-                    print("No action found for state:", state)
+                    f.write("No action found for state: {}\n".format(state))
                     break
                 
                 action_num = self.actions.index(action)
@@ -710,8 +710,12 @@ class VISim(State):
                 if next_states:
                     state = max(next_states, key=lambda x: x[1])[0]
                 else:
-                    print("No valid transitions from state:", state)
+                    f.write("No valid transitions from state: {}\n".format(state))
                     break
+
+            # Print the final state in the output file
+            f.write("Final state:\n")
+            f.write(self.PrintSimulatedState(state, None, None))
 
 
     def PrintSimulatedState(self, state, action, action_num):
@@ -731,10 +735,13 @@ class VISim(State):
             output += "\n"
             
         output += f"- B1: {state[2]} - B2: {state[3]} - B3: {state[4]} - B4: {state[5]} - B5: {state[6]} action: {action} {action_num}\n"
-        output += f"reward: {self.Reward(state, action)}\n\n"
+        
+        if action is not None:
+            output += f"reward: {self.Reward(state, action)}\n\n"
+        else:
+            output += "reward: None\n\n"
         
         return output
-
 
 
 
@@ -779,5 +786,5 @@ if __name__ == "__main__":
     warehouse = State()
     # VI(warehouse)
     # QL(warehouse)
-    EVMC(warehouse)
+    # EVMC(warehouse)
     # Random(warehouse)
