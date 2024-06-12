@@ -425,7 +425,6 @@ class State:
         # make a sample trajectory after finishing q learning training  
         self.test_QLearning(0, max_episode_length)
 
-
     def test_QLearning(self, epsilon, max_episode_length = 100):
         state = (0,0,0,0,0,0,0,0)
         episode_length = 0
@@ -438,6 +437,63 @@ class State:
 
             action_idx = random.choices(possible_actions, k=1, weights = np.where(possible_actions == best_action, 1 - epsilon + epsilon/len(possible_actions), epsilon/len(possible_actions)))[0]
             action = self.actions[action_idx]
+
+            reward = self.Reward(state, action)
+            accumulated_reward += reward
+
+            self.PrintWarehouse(state, action, episode_length + 1)
+
+            states, probabilities = zip(*self.Transition(state, action))
+
+            successor_state = random.choices(states, k=1, weights=probabilities)[0]
+            state=successor_state
+            episode_length += 1
+            
+        if self.CheckGoalState(state):
+            accumulated_reward += self.Reward(state, ('end', None))
+            self.PrintWarehouse(state, ('end', None), episode_length + 1)
+
+        print(f"Total reward earned over episode: {accumulated_reward}")
+
+    def random(self, num_episodes, max_episode_length = 1000):
+        rewards = []
+        runtimes = []
+        for _ in range(num_episodes):
+            start_time = time.time()
+
+            state = (0,0,0,0,0,0,0,0)
+            episode_length = 0
+
+            accumulated_reward = 0
+            while not self.CheckGoalState(state) and episode_length < max_episode_length:
+                action = random.choice(self.getPossibleActions(state))
+
+                reward = self.Reward(state, action)
+                accumulated_reward += reward
+
+                states, probabilities = zip(*self.Transition(state, action))
+
+                successor_state = random.choices(states, k=1, weights=probabilities)[0]
+                state=successor_state
+                episode_length += 1
+                
+            if self.CheckGoalState(state):
+                accumulated_reward += self.Reward(state, ('end', None))
+            
+            elapsed = time.time() - start_time
+            runtimes.append(elapsed)
+            rewards.append(accumulated_reward)
+
+        print(f"Average reward for random (possible) actions over episodes of max length {max_episode_length}: {np.average(rewards)}")
+        print(f"Total runtime: {sum(runtimes)}      Average runtime per episode: {np.average(runtimes)}")
+    
+    def test_random(self, max_episode_length = 1000):
+        state = (0,0,0,0,0,0,0,0)
+        episode_length = 0
+
+        accumulated_reward = 0
+        while not self.CheckGoalState(state) and episode_length < max_episode_length:
+            action = random.choice(self.getPossibleActions(state))
 
             reward = self.Reward(state, action)
             accumulated_reward += reward
@@ -549,7 +605,7 @@ class VISim(State):
 
 
 
-def VI(warehouse):
+def VI(warehouse: State):
     print("Running VI...")
     warehouse.ValueIteration(gamma=0.99)
     warehouse.VI_plot()
@@ -558,7 +614,7 @@ def VI(warehouse):
     warehouse_simulation.simulate((0, 0, 0, 0, 0, 0, 0, 0))
    
     
-def QL(warehouse):
+def QL(warehouse: State):
     print("Running QL...")
     # warehouse.ValueIteration(gamma=0.9)
     episodes = 5000
@@ -566,8 +622,15 @@ def QL(warehouse):
     # warehouse.Q = np.load("QLearning_200000_episodes.npy")
     # warehouse.test_QLearning(0, 1000)
     
+def Random(warehouse: State):
+    print("Running random...")
+
+    max_episode_length = 1000
+
+    warehouse.random(1000, max_episode_length)
+    warehouse.test_random(max_episode_length)
     
-def EVMC(warehouse):
+def EVMC(warehouse: State):
     print("Running EVMC...")
         
 
@@ -576,3 +639,4 @@ if __name__ == "__main__":
     # VI(warehouse)
     # QL(warehouse)
     # EVMC(warehouse)
+    # Random(warehouse)
