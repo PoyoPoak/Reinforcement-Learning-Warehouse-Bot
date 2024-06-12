@@ -1,13 +1,8 @@
-import random
 import time
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
-import itertools
-import multiprocessing as mp
-from multiprocessing import Pool
-import random
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
 WAREHOUSE_SIZE = 10
@@ -17,15 +12,14 @@ class State:
         self.actions = [('move', dir) for dir in POSSIBLE_DIRS] + [('stack', i) for i in range(5)] + [('setdown', None), ('pickup', None)]
         self.box_initial_locations = [(3, 5), (1, 8), (5, 4), (9, 1), (7, 2)]
         self.goal_location = (WAREHOUSE_SIZE - 1, WAREHOUSE_SIZE - 1)
-        self.gamma = 0.99
         self.policy = {}
         self.states = []
         self.CalculateAllStates()
         self.residuals = []
         self.iteration_times = []
 
+
     def CalculateAllStates(self):
-        """ Calculate all possible states (discluding impossible ones) stored in self.states """
         skipped = 0
         self.totalSkipped = []
         self.indexValues = [WAREHOUSE_SIZE * 4**5, 4**5, 4**4, 4**3, 4**2, 4**1, 1]
@@ -51,63 +45,26 @@ class State:
                                  
                                         
     def fastIndex(self, state):
-        """ Get the index of the provided state in self.states
-
-        Args:
-            state (tuple): Current state of the warehouse
-
-        Returns:
-            int: Index of the state in self.states
-        """
         absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
         return absIndex - self.totalSkipped[absIndex]
               
               
     def CheckGoalState(self, state):
-        """ Check if the current state is the goal state
-
-        Args:
-            state (tuple): Current state of the warehouse
-
-        Returns:
-            bool: True if the state is the goal state, False otherwise.
-        """
         return state == (9, 9, 2, 2, 2, 2, 2, 0)       
                                     
     
     def CheckStackOrder(self, state, box):
-        """ Check if the box can be stacked on top of the current stack
-
-        Args:
-            state (tuple): Current state of the warehouse
-            box (int): BoxID of the box to be stacked (0-4)
-
-        Returns:
-            bool: True if the box can be stacked, False otherwise.
-        """
-        # Check if the box is already stacked
         if state[box + 2] == 2:  
             return False
         
         current_stack = [i for i in range(5) if state[i + 2] == 2]
         
-        # No boxes stacked, any box can be stacked
         if not current_stack:  
             return True
         return all(box < stacked_box for stacked_box in current_stack)
     
     
     def Transition(self, state, action):
-        """ Our transition function, returns a list of possible states and their probabilities.
-
-        Args:
-            state (tuple): Current state of the warehouse
-            action (tuple): Action to be taken (e.g. ('move', 'left') or ('stack', 2)
-
-        Returns:
-            list: List of possible states and their probabilities. 
-                    Ex: [((1, 2, 0, 0, 0, 0, 0, 0), 0.8), ((1, 3, 0, 0, 0, 0, 0, 0), 0.2) ...]
-        """
         state_list = []
         
         if action[0] == 'move':
@@ -191,7 +148,6 @@ class State:
             state_list.append((tuple(new_state), 1))
         
         elif action[0] == "pickup":
-            # no box initially starts here, the box that's supposed to be here has been picked up, or we are already carrying a box# double check
             if state[7] == 0 or state[state[7]+1] != 0 or 3 in state[2:7]: # note: state[7] starts at 1 so only add 1 to get box index as state idx starts at 0
                 return None
             
@@ -206,15 +162,6 @@ class State:
 
 
     def Reward(self, state, action):
-        """ Reward function. Returns the reward for a given state and action.
-
-        Args:
-            state (tuple): Current state of the warehouse
-            action (tuple): Action to be taken (e.g. ('move', 'left') or ('stack', 2)
-
-        Returns:
-            float: Reward for the given state and action
-        """
         if action[0] == 'end':
             return 100
 
@@ -239,7 +186,6 @@ class State:
                 
                 
     def ValueIteration(self):
-        """ Runs value iteration """
         self.V = np.zeros(len(self.states), dtype=np.float16)
         max_trials = 1000
         epsilon = 0.00001
@@ -308,22 +254,12 @@ class State:
         
         return curr_iter
         
-        
-    # __cache takes advantage of default paramaters to store a local dict that persists between function calls
+         
     def qValue(self, s, action, possible_states, __cache = {}): 
-        """ Calculate the Q-value of a given state and action
-
-        Args:
-            s (tuple): Current state of the warehouse   
-            action (tuple): Action to be taken (e.g. ('move', 'left') or ('stack', 2)
-            possible_states (list): List of next possible states with action probabilities
-
-        Returns:
-            float: Q-value of the given state and action
-        """
+        gamma = 0.99
         initialize_bestQ = -10000
         
-        if possible_states is not None: # If there are possible states
+        if possible_states is not None:
 
             if (s,action) not in __cache:
                 states,probabilities = zip(*possible_states)
@@ -335,9 +271,9 @@ class State:
             
             succ_sum = np.sum(probabilities * self.V[indices])
             
-            return self.Reward(s, action) + self.gamma * succ_sum
+            return self.Reward(s, action) + gamma * succ_sum
         
-        else: # If no possible states, return the initialized bestQ
+        else: 
             return initialize_bestQ
         
         
@@ -372,20 +308,19 @@ class State:
         print("Learning curve, policy stability, and iteration time plot saved as 'learning_curve_and_policy_stability.png'")
         
         
-    def save_policy_to_csv(self, filename='policy.csv'):
+    def VI_policy_csv(self, filename='vi_policy.csv'):
         policy_list = [(self.states[i], self.policy[i]) for i in range(len(self.states))]
         df = pd.DataFrame(policy_list, columns=['State', 'Action'])
         df.to_csv(filename, index=False)
         print(f"Policy saved to {filename}")
 
 
-class VIStateSimulation(State):
+class VISim(State):
     def __init__(self, policy_file):
         super().__init__()
         self.load_policy(policy_file)
         
     def load_policy(self, policy_file):
-        """ Load policy from a CSV file """
         policy_df = pd.read_csv(policy_file)
         
         self.policy_dict = {}
@@ -394,6 +329,7 @@ class VIStateSimulation(State):
             state_tuple = eval(row['State'])
             action_index = row['Action']
             self.policy_dict[state_tuple] = self.actions[action_index]
+
 
     def PrintWarehouse(self, state, action=None, action_num=None):
         for i in range(WAREHOUSE_SIZE):
@@ -410,6 +346,7 @@ class VIStateSimulation(State):
             
         print("- B1:", state[2], "- B2:", state[3], "- B3:", state[4], "- B4:", state[5], "- B5:", state[6], "action:", action, action_num)
         print("reward:", self.Reward(state, action), "\n")
+
 
     def simulate(self, start_state, steps=500):
         output_file='simulation_output.txt'
@@ -438,6 +375,7 @@ class VIStateSimulation(State):
                     print("No valid transitions from state:", state)
                     break
 
+
     def PrintSimulatedState(self, state, action, action_num):
         output = ""
         
@@ -461,8 +399,11 @@ class VIStateSimulation(State):
 
 
 if __name__ == "__main__":
-    policy_file = './vi_policy.csv'
-    start_state = (0, 0, 0, 0, 0, 0, 0, 0)
+    warehouse = State()
     
-    warehouse_simulation = VIStateSimulation(policy_file)
-    warehouse_simulation.simulate(start_state)
+    # Value Iteration
+    warehouse.ValueIteration()
+    warehouse.VI_plot()
+    warehouse.VI_policy_csv()
+    warehouse_simulation = VISim('./vi_policy.csv')
+    warehouse_simulation.simulate((0, 0, 0, 0, 0, 0, 0, 0))
