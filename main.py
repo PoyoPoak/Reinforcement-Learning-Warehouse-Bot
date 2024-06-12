@@ -689,6 +689,7 @@ class VISim(State):
     def simulate(self, start_state, steps=500):
         output_file = 'simulation_output.txt'
         state = start_state
+        total_reward = 0
         
         with open(output_file, 'w') as f:
             for step in range(steps):
@@ -704,7 +705,11 @@ class VISim(State):
                 
                 action_num = self.actions.index(action)
                 self.PrintWarehouse(state, action, action_num)
-                f.write(self.PrintSimulatedState(state, action, action_num))
+                
+                reward = self.Reward(state, action)
+                total_reward += reward
+                f.write(self.PrintSimulatedState(state, action, action_num, reward))
+                
                 next_states = self.Transition(state, action)
                 
                 if next_states:
@@ -713,12 +718,13 @@ class VISim(State):
                     f.write("No valid transitions from state: {}\n".format(state))
                     break
 
-            # Print the final state in the output file
+            # Print the final state and total accumulated reward in the output file
             f.write("Final state:\n")
-            f.write(self.PrintSimulatedState(state, None, None))
+            f.write(self.PrintSimulatedState(state, None, None, None))
+            f.write(f"Total accumulated reward: {total_reward}\n")
 
 
-    def PrintSimulatedState(self, state, action, action_num):
+    def PrintSimulatedState(self, state, action, action_num, reward):
         output = ""
         
         for i in range(WAREHOUSE_SIZE):
@@ -734,12 +740,12 @@ class VISim(State):
                     
             output += "\n"
             
-        output += f"- B1: {state[2]} - B2: {state[3]} - B3: {state[4]} - B4: {state[5]} - B5: {state[6]} action: {action} {action_num}\n"
+        output += f"- B1: {state[2]} - B2: {state[3]} - B3: {state[4]} - B4: {state[5]} - B5: {state[6]} next action: {action} {action_num}\n"
         
-        if action is not None:
-            output += f"reward: {self.Reward(state, action)}\n\n"
+        if reward is not None:
+            output += f"reward for next action: {reward}\n\n"
         else:
-            output += "reward: None\n\n"
+            output += "reward for next action: None\n\n"
         
         return output
 
@@ -784,7 +790,7 @@ def EVMC(warehouse: State):
 
 if __name__ == "__main__":
     warehouse = State()
-    # VI(warehouse)
+    VI(warehouse)
     # QL(warehouse)
     # EVMC(warehouse)
     # Random(warehouse)
