@@ -4,6 +4,9 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
+from tqdm import tqdm
+import os
+import sys
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
 WAREHOUSE_SIZE = 10
@@ -487,6 +490,143 @@ class State:
         print(f"Average reward for random (possible) actions over episodes of max length {max_episode_length}: {np.average(rewards)}")
         print(f"Total runtime: {sum(runtimes)}      Average runtime per episode: {np.average(runtimes)}")
     
+    def EveryVisitMonteCarlo(self, num_episodes, gamma, epsilon, max_episode_length, file_name = None):
+        print(f"Episodes: {num_episodes}, Gamma: {gamma}, Epsilon: {epsilon}, Max Episode Length: {max_episode_length}")
+        self.Q = np.zeros((len(self.states),len(self.actions)),dtype=np.float16)
+
+        self.P = np.zeros(len(self.states),dtype=object)
+
+        self.policy = {}
+        self.UpdatePolicy(epsilon, self.states)
+
+        runtimes = []
+        rewards = []
+
+        for _ in tqdm(range(num_episodes)):
+            start_time = time.time()
+
+            episode = []
+            state = (0,0,0,0,0,0,0,0)
+            
+            episode_length = 0
+            accumulated_reward = 0
+            while not self.CheckGoalState(state) and episode_length < max_episode_length:
+                state_idx = self.fastIndex(state)
+
+                # Get action from epsilon-greedy policy
+                action = self.policy[state]
+
+                # Get reward
+                reward = self.Reward(state, action)
+                accumulated_reward += reward
+
+                # Store episode step
+                episode.append((state, action, reward))
+
+                # Generate successor state
+                states, probabilities = zip(*self.Transition(state, action))
+                successor_state = random.choices(states, k=1, weights=probabilities)[0]
+                state = successor_state
+
+                episode_length += 1
+
+                if self.CheckGoalState(state):
+                    accumulated_reward += self.Reward(state, ('end', None))
+
+            rewards.append(accumulated_reward)
+
+            state_action_rewards_lists = {}
+            encountered_state_actions = set()
+            encountered_states = set()
+            discounted_reward = 0
+            # calculate discounted reward
+            for (state, action, reward) in reversed(episode):
+                discounted_reward = reward + gamma * discounted_reward
+
+                if (state, action) not in encountered_state_actions: # Init reward storage for unseen state-action pairs 
+                    state_action_rewards_lists[(state, action)] = []
+                    encountered_state_actions.add((state, action))
+                    encountered_states.add(state)
+
+                # Make list of discounted rewards for each state-action pair
+                state_action_rewards_lists[(state, action)] = np.append(state_action_rewards_lists[(state, action)], discounted_reward)
+
+            # Update Q-values to mean of discounted rewards
+            for (state, action) in encountered_state_actions:
+                state_idx = self.fastIndex(state)
+                action_idx = self.actions.index(action)
+                self.Q[state_idx, action_idx] = np.mean(state_action_rewards_lists[(state, action)])
+            
+            self.UpdatePolicy(epsilon, encountered_states)
+
+            elapsed = time.time() - start_time
+            runtimes.append(elapsed)
+
+        print(f"Total runtime: {sum(runtimes)}   Average runtime per episode: {sum(runtimes)/len(runtimes)}   Average reward: {sum(rewards)/len(rewards)}")
+
+        if file_name:
+            np.save(file_name,self.Q)
+
+        # make a learning curve
+        plt.figure()
+        plt.xlabel("Episode")
+        plt.ylabel("Reward")
+        plt.title("EVMC Learning curve")
+        plt.plot(np.arange(len(rewards)),rewards)
+
+        window_width = num_episodes//20
+        running_sum = np.cumsum(np.pad(rewards,window_width//2,mode='edge'))
+        moving_averages = (running_sum[window_width:] - running_sum[:-window_width]) / window_width
+        plt.plot(np.arange(len(rewards)),moving_averages, color="red")
+        plt.show()
+
+        # make a sample trajectory after finishing q learning training  
+        self.test_EVMC(max_episode_length)
+
+    def UpdatePolicy(self, epsilon, states):
+        for state in states:
+            state_idx = self.fastIndex(state)
+
+            if isinstance(self.P[state_idx],int) and self.P[state_idx] == 0: # transition probabilities and action not yet calculated
+                self.P[state_idx] = np.array([*map(self.actions.index,self.getPossibleActions(state))],dtype=np.int32) # calculate
+
+            possible_actions = self.P[state_idx]
+            best_action = possible_actions[np.argmax(self.Q[state_idx,possible_actions])]
+
+            # chose action for policy based on epsilon-greedy policy
+            action_idx = random.choices(possible_actions, k=1, weights = np.where(possible_actions == best_action, 1 - epsilon + epsilon/len(possible_actions), epsilon/len(possible_actions)))[0]
+            self.policy[state] = self.actions[action_idx]
+
+    def test_EVMC(self, max_episode_length = 100):
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        output_file_path = os.path.join(cwd, 'agent_path.txt')
+        original_stdout = sys.stdout
+        with open(output_file_path, 'w') as sys.stdout:
+            state = (0,0,0,0,0,0,0,0)
+            episode_length = 0
+
+            accumulated_reward = 0
+            while not self.CheckGoalState(state) and episode_length < max_episode_length:
+                action = self.policy[state]
+
+                reward = self.Reward(state, action)
+                accumulated_reward += reward
+
+                self.PrintWarehouse(state, action, episode_length + 1)
+
+                states, probabilities = zip(*self.Transition(state, action))
+
+                successor_state = random.choices(states, k=1, weights=probabilities)[0]
+                state=successor_state
+                episode_length += 1
+                
+            if self.CheckGoalState(state):
+                accumulated_reward += self.Reward(state, ('end', None))
+                self.PrintWarehouse(state, ('end', None), episode_length + 1)
+
+            print(f"Total reward earned over episode: {accumulated_reward}")
+        sys.stdout = original_stdout
+    
     def test_random(self, max_episode_length = 1000):
         state = (0,0,0,0,0,0,0,0)
         episode_length = 0
@@ -632,11 +772,12 @@ def Random(warehouse: State):
     
 def EVMC(warehouse: State):
     print("Running EVMC...")
+    warehouse.EveryVisitMonteCarlo(100000, gamma=0.9, epsilon=0.3, max_episode_length=500, file_name='EVMC.npy')
         
 
 if __name__ == "__main__":
     warehouse = State()
     # VI(warehouse)
     # QL(warehouse)
-    # EVMC(warehouse)
+    EVMC(warehouse)
     # Random(warehouse)
