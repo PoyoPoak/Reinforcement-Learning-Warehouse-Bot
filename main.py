@@ -1,7 +1,13 @@
 import random
 import time
 import numpy as np
-# Example of a state: (agent_x, agent_y, b1_status, b2_status, b3_status, b4_status, b5_status, BoxID of box's initial location)
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
+import itertools
+import multiprocessing as mp
+from multiprocessing import Pool
+import random
 
 POSSIBLE_DIRS = ['left', 'down', 'right', 'up']
 WAREHOUSE_SIZE = 10
@@ -15,14 +21,15 @@ class State:
         self.policy = {}
         self.states = []
         self.CalculateAllStates()
-        print("State space:",len(self.states))     
-        
+        self.residuals = []
+        self.iteration_times = []
+
     def CalculateAllStates(self):
         """ Calculate all possible states (discluding impossible ones) stored in self.states """
         skipped = 0
         self.totalSkipped = []
-
         self.indexValues = [WAREHOUSE_SIZE * 4**5, 4**5, 4**4, 4**3, 4**2, 4**1, 1]
+        
         for x in range(WAREHOUSE_SIZE):
             for y in range(WAREHOUSE_SIZE):
                 for b1 in range(4):
@@ -37,18 +44,25 @@ class State:
                                         continue
                                         
                                     # Sets initial BoxID of position, based on box initial positions
-                                    if (x,y) not in self.box_initial_locations:
+                                    if (x, y) not in self.box_initial_locations:
                                         self.states.append((x, y, b1, b2, b3, b4, b5, 0))
                                     else:
-                                        self.states.append((x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x,y)) + 1))
+                                        self.states.append((x, y, b1, b2, b3, b4, b5, self.box_initial_locations.index((x, y)) + 1))
                                  
                                         
     def fastIndex(self, state):
-        """ Get the index of the provided state in self.states """
+        """ Get the index of the provided state in self.states
+
+        Args:
+            state (tuple): Current state of the warehouse
+
+        Returns:
+            int: Index of the state in self.states
+        """
         absIndex = sum(state[i] * self.indexValues[i] for i in range(len(state)-1))
         return absIndex - self.totalSkipped[absIndex]
               
-    
+              
     def CheckGoalState(self, state):
         """ Check if the current state is the goal state
 
@@ -81,31 +95,6 @@ class State:
         if not current_stack:  
             return True
         return all(box < stacked_box for stacked_box in current_stack)
-
-    
-    def PrintState(self, state):    
-        """ Print the current state of the agent
-
-        Args:
-            state (tuple): Current state of the warehouse
-        """
-        print("Agent Location: ", state[0], state[1])
-        print("Boxes: ", state[2:7])
-        print("BoxID in current location: ", state[7])
-        
-        
-    def PrintWarehouse(self, state):
-        """ Print the warehouse with the agent and goal location marked with 'A' and 'G' respectively """        
-        for i in range(WAREHOUSE_SIZE):
-            for j in range(WAREHOUSE_SIZE):
-                if (i,j) == (state[0], state[1]):
-                    print("A", end = " ")
-                elif (i,j) == self.goal_location:
-                    print("G", end = " ")
-                else:
-                    print(".", end = " ")
-            print()
-        print()
     
     
     def Transition(self, state, action):
@@ -136,30 +125,30 @@ class State:
             def getMov(dir):
                 xdir = [0, 1, 0, -1][dir]
                 ydir = [-1, 0, 1, 0][dir]
-                return (xdir,ydir)
+                return (xdir, ydir)
 
             originalDirection = POSSIBLE_DIRS.index(action[1])
-            xmov,ymov = getMov(originalDirection)
-            if not(0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE):
+            xmov, ymov = getMov(originalDirection)
+            if not (0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE):
                 return None
 
             # left
             direction = (originalDirection - 1) % 4
-            xmov,ymov = getMov(direction)
+            xmov, ymov = getMov(direction)
             if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
                 new_state = (x + xmov, y + ymov, *state[2:])
                 state_list.append((update_box_id(new_state), 0.05))
             else:
-                state_list.append((state,0.05))
+                state_list.append((state, 0.05))
 
             # right
             direction = (originalDirection + 1) % 4 
-            xmov,ymov = getMov(direction)
+            xmov, ymov = getMov(direction)
             if 0 <= (x + xmov) < WAREHOUSE_SIZE and 0 <= (y + ymov) < WAREHOUSE_SIZE:
                 new_state = (x + xmov, y + ymov, *state[2:])
                 state_list.append((update_box_id(new_state), 0.05))
             else:
-                state_list.append((state,0.05))
+                state_list.append((state, 0.05))
 
             # double & regular move
             xmov, ymov = getMov(originalDirection)
@@ -213,15 +202,8 @@ class State:
         else:
             raise Exception("Invalid action")
 
-        # Test prints
-        # self.PrintState(state)
-        # self.PrintWarehouse(state)
-        # print("--------------------------------------")
-        # for s in state_list:
-        #     self.PrintState(s[0])
-        #     self.PrintWarehouse(s[0])
-
         return state_list
+
 
     def Reward(self, state, action):
         """ Reward function. Returns the reward for a given state and action.
@@ -240,48 +222,46 @@ class State:
             if self.CheckStackOrder(state, int(action[1])):
                 return 10
             else:
-                return -50 
+                return -50
         
         elif action[0] == 'setdown':
             if (state[0], state[1]) == self.goal_location and 3 in state[2:7]:
-                return 5 
-
-        elif (state[0], state[1]) == self.goal_location: # also based on action?
-            return 2
+                return 5
 
         elif action[0] == 'move':
-            return -1
+            return -0.05
             
         elif action[0] == 'pickup':
-            return 5 
+            return 5
         
         else:
             raise Exception("Invalid action")
                 
+                
     def ValueIteration(self):
         """ Runs value iteration """
-        self.V = np.zeros(len(self.states),dtype=np.float16)
-        max_trials = 100
-        epsilon = 0.01
+        self.V = np.zeros(len(self.states), dtype=np.float16)
+        max_trials = 1000
+        epsilon = 0.00001
         initialize_bestQ = -10000
         curr_iter = 0
-        bestAction = np.full(len(self.states), -1,dtype=np.byte)
-        
-        start = time.time()
+        self.P = np.zeros((len(self.actions), len(self.states)), dtype=object)
+        self.residuals = []
+        self.policy_changes = []
+        self.iteration_times = []
 
-        self.P = np.zeros((len(self.actions),len(self.states)),dtype=object)
-        
+        start = time.time()
         while curr_iter < max_trials:
             iter_start = time.time()
             max_residual = 0
             curr_iter += 1
-            print('Iteration: ', curr_iter)
             
-            bestQ = np.full_like(self.V, initialize_bestQ,dtype=np.float16)
+            bestQ = np.full_like(self.V, initialize_bestQ, dtype=np.float16)
+            new_policy = np.full(len(self.states), -1, dtype=np.byte)
             # Loop over states to calculate values
             for idx, s, in enumerate(self.states):
                 if self.CheckGoalState(s): # Check for goal state
-                    bestAction[idx] = 0
+                    new_policy[idx] = 0
                     bestQ[idx] = self.Reward(s, ('end', None))  
                     continue
                 
@@ -297,21 +277,37 @@ class State:
 
                     if qaction > bestQ[idx]:
                         bestQ[idx] = qaction
-                        bestAction[idx] = na
+                        new_policy[idx] = na
             
             residual = np.abs(bestQ - self.V)
             self.V = bestQ
             max_residual = max(max_residual,np.max(residual))
 
-            print('Max Residual:', max_residual, "time:",(time.time() - iter_start) / 60)
+            # Store residuals in the object
+            self.residuals.append(max_residual)
+
+            # Calculate policy changes
+            if curr_iter > 1:
+                policy_change_count = np.sum(new_policy != self.policy)
+                self.policy_changes.append(policy_change_count)
+            else:
+                self.policy_changes.append(0)
+
+            self.policy = new_policy
+
+            runtime = time.time() - iter_start
+            self.iteration_times.append(runtime)
+
+            print('Iteration:', curr_iter, 'Max Residual:', max_residual, "time(s):", runtime)
 
             if max_residual < epsilon:
                 break
 
-        self.policy = bestAction
-
         end = time.time()
         print('Time taken to solve (minutes): ', (end - start) / 60)
+        
+        return curr_iter
+        
         
     # __cache takes advantage of default paramaters to store a local dict that persists between function calls
     def qValue(self, s, action, possible_states, __cache = {}): 
@@ -343,7 +339,130 @@ class State:
         
         else: # If no possible states, return the initialized bestQ
             return initialize_bestQ
+        
+        
+    def VI_plot(self):
+        matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 
-warehouse = State()
-warehouse.ValueIteration()
-print()
+        fig, ax1 = plt.subplots()
+
+        color = 'tab:red'
+        ax1.set_xlabel('Iteration')
+        ax1.set_ylabel('Max Residual', color=color)
+        ax1.plot(range(len(self.residuals)), self.residuals, color=color)
+        ax1.tick_params(axis='y', labelcolor=color)
+
+        ax2 = ax1.twinx()
+        color = 'tab:blue'
+        ax2.set_ylabel('Policy Changes', color=color)
+        ax2.plot(range(len(self.policy_changes)), self.policy_changes, color=color)
+        ax2.tick_params(axis='y', labelcolor=color)
+
+        ax3 = ax1.twinx()
+        ax3.spines["right"].set_position(("outward", 60))
+        color = 'tab:green'
+        ax3.set_ylabel('Iteration Time (s)', color=color)
+        ax3.plot(range(len(self.iteration_times)), self.iteration_times, color=color)
+        ax3.tick_params(axis='y', labelcolor=color)
+
+        fig.tight_layout()
+        plt.title('Learning Curve, Policy Stability, and Iteration Time')
+        plt.savefig('learning_curve_and_policy_stability.png')
+        plt.close(fig)
+        print("Learning curve, policy stability, and iteration time plot saved as 'learning_curve_and_policy_stability.png'")
+        
+        
+    def save_policy_to_csv(self, filename='policy.csv'):
+        policy_list = [(self.states[i], self.policy[i]) for i in range(len(self.states))]
+        df = pd.DataFrame(policy_list, columns=['State', 'Action'])
+        df.to_csv(filename, index=False)
+        print(f"Policy saved to {filename}")
+
+
+class VIStateSimulation(State):
+    def __init__(self, policy_file):
+        super().__init__()
+        self.load_policy(policy_file)
+        
+    def load_policy(self, policy_file):
+        """ Load policy from a CSV file """
+        policy_df = pd.read_csv(policy_file)
+        
+        self.policy_dict = {}
+        
+        for _, row in policy_df.iterrows():
+            state_tuple = eval(row['State'])
+            action_index = row['Action']
+            self.policy_dict[state_tuple] = self.actions[action_index]
+
+    def PrintWarehouse(self, state, action=None, action_num=None):
+        for i in range(WAREHOUSE_SIZE):
+            for j in range(WAREHOUSE_SIZE):
+                if (i, j) == (state[0], state[1]):
+                    print("A", end=" ")
+                elif (i, j) in self.box_initial_locations:
+                    print(f"B", end=" ")
+                elif (i, j) == self.goal_location:
+                    print("G", end=" ")
+                else:
+                    print(".", end=" ")
+            print()
+            
+        print("- B1:", state[2], "- B2:", state[3], "- B3:", state[4], "- B4:", state[5], "- B5:", state[6], "action:", action, action_num)
+        print("reward:", self.Reward(state, action), "\n")
+
+    def simulate(self, start_state, steps=500):
+        output_file='simulation_output.txt'
+        state = start_state
+        
+        with open(output_file, 'w') as f:
+            for step in range(steps):
+                if self.CheckGoalState(state):
+                    print("Goal state reached!")
+                    break
+                
+                action = self.policy_dict.get(state)
+                
+                if not action:
+                    print("No action found for state:", state)
+                    break
+                
+                action_num = self.actions.index(action)
+                self.PrintWarehouse(state, action, action_num)
+                f.write(self.PrintSimulatedState(state, action, action_num))
+                next_states = self.Transition(state, action)
+                
+                if next_states:
+                    state = max(next_states, key=lambda x: x[1])[0]
+                else:
+                    print("No valid transitions from state:", state)
+                    break
+
+    def PrintSimulatedState(self, state, action, action_num):
+        output = ""
+        
+        for i in range(WAREHOUSE_SIZE):
+            for j in range(WAREHOUSE_SIZE):
+                if (i, j) == (state[0], state[1]):
+                    output += "A "
+                elif (i, j) in self.box_initial_locations:
+                    output += "B "
+                elif (i, j) == self.goal_location:
+                    output += "G "
+                else:
+                    output += ". "
+                    
+            output += "\n"
+            
+        output += f"- B1: {state[2]} - B2: {state[3]} - B3: {state[4]} - B4: {state[5]} - B5: {state[6]} action: {action} {action_num}\n"
+        output += f"reward: {self.Reward(state, action)}\n\n"
+        
+        return output
+
+
+if __name__ == "__main__":
+    policy_file = './vi_policy.csv'
+    start_state = (0, 0, 0, 0, 0, 0, 0, 0)
+    
+    warehouse_simulation = VIStateSimulation(policy_file)
+    warehouse_simulation.simulate(start_state)
